@@ -19,6 +19,7 @@
 
 /* P-SEAMLDR SEAMCALL leaf function */
 #define P_SEAMLDR_INFO			0x8000000000000000
+#define P_SEAMLDR_INSTALL		0x8000000000000001
 
 #define SEAMLDR_MAX_NR_MODULE_4KB_PAGES	496
 #define SEAMLDR_MAX_NR_SIG_4KB_PAGES	4
@@ -186,6 +187,7 @@ static struct seamldr_params *init_seamldr_params(const u8 *data, u32 size)
 enum module_update_state {
 	MODULE_UPDATE_START,
 	MODULE_UPDATE_SHUTDOWN,
+	MODULE_UPDATE_CPU_INSTALL,
 	MODULE_UPDATE_DONE,
 };
 
@@ -225,6 +227,7 @@ static void ack_state(void)
 static int do_seamldr_install_module(void *seamldr_params)
 {
 	enum module_update_state newstate, curstate = MODULE_UPDATE_START;
+	struct tdx_module_args args = {};
 	int cpu = smp_processor_id();
 	bool primary;
 	int ret = 0;
@@ -242,6 +245,10 @@ static int do_seamldr_install_module(void *seamldr_params)
 			case MODULE_UPDATE_SHUTDOWN:
 				if (primary)
 					ret = tdx_module_shutdown();
+				break;
+			case MODULE_UPDATE_CPU_INSTALL:
+				args.rcx = __pa(seamldr_params);
+				ret = seamldr_call(P_SEAMLDR_INSTALL, &args);
 				break;
 			default:
 				break;
