@@ -7,6 +7,7 @@
 #define pr_fmt(fmt)	"seamldr: " fmt
 
 #include <linux/irqflags.h>
+#include <linux/mm.h>
 #include <linux/types.h>
 
 #include <asm/seamldr.h>
@@ -69,3 +70,21 @@ const struct seamldr_info *seamldr_get_info(void)
 	return seamldr_call(P_SEAMLDR_INFO, &args) ? NULL : &seamldr_info;
 }
 EXPORT_SYMBOL_FOR_MODULES(seamldr_get_info, "tdx-host");
+
+/**
+ * seamldr_install_module - Install a new TDX module
+ * @data: Pointer to the TDX module binary data. It should be vmalloc'd
+ *        memory.
+ * @size: Size of the TDX module binary data
+ *
+ * Returns 0 on success, negative error code on failure.
+ */
+int seamldr_install_module(const u8 *data, u32 size)
+{
+	if (!is_vmalloc_addr(data))
+		return -EINVAL;
+
+	/* TODO: Update TDX Module here */
+	return 0;
+}
+EXPORT_SYMBOL_FOR_MODULES(seamldr_install_module, "tdx-host");
