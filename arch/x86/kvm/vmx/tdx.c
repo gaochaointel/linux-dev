@@ -3321,21 +3321,6 @@ int tdx_gmem_private_max_mapping_level(struct kvm *kvm, kvm_pfn_t pfn)
 	return PG_LEVEL_4K;
 }
 
-static int tdx_online_cpu(unsigned int cpu)
-{
-	unsigned long flags;
-	int r;
-
-	/* Sanity check CPU is already in post-VMXON */
-	WARN_ON_ONCE(!(cr4_read_shadow() & X86_CR4_VMXE));
-
-	local_irq_save(flags);
-	r = tdx_cpu_enable();
-	local_irq_restore(flags);
-
-	return r;
-}
-
 static int tdx_offline_cpu(unsigned int cpu)
 {
 	int i;
@@ -3372,7 +3357,7 @@ static int tdx_offline_cpu(unsigned int cpu)
 	return -EBUSY;
 }
 
-static void __do_tdx_cleanup(void)
+static void __tdx_cleanup(void)
 {
 	/*
 	 * Once TDX module is initialized, it cannot be disabled and
@@ -3382,15 +3367,8 @@ static void __do_tdx_cleanup(void)
 	 * 'multiple enabling' scenario.
 	 */
 	WARN_ON_ONCE(!tdx_cpuhp_state);
-	cpuhp_remove_state_nocalls_cpuslocked(tdx_cpuhp_state);
+	cpuhp_remove_state_nocalls(tdx_cpuhp_state);
 	tdx_cpuhp_state = 0;
-}
-
-static void __tdx_cleanup(void)
-{
-	cpus_read_lock();
-	__do_tdx_cleanup();
-	cpus_read_unlock();
 }
 
 static int __init __do_tdx_bringup(void)
@@ -3398,13 +3376,11 @@ static int __init __do_tdx_bringup(void)
 	int r;
 
 	/*
-	 * TDX-specific cpuhp callback to call tdx_cpu_enable() on all
-	 * online CPUs before calling tdx_enable(), and on any new
-	 * going-online CPU to make sure it is ready for TDX guest.
+	 * TDX needs at least one cpu online in each socket. Register a
+	 * cpuhp callback to prevent offlining all cpus in a socket.
 	 */
-	r = cpuhp_setup_state_cpuslocked(CPUHP_AP_ONLINE_DYN,
-					 "kvm/cpu/tdx:online",
-					 tdx_online_cpu, tdx_offline_cpu);
+	r = cpuhp_setup_state(CPUHP_AP_ONLINE_DYN, "kvm/cpu/tdx:online",
+			      NULL, tdx_offline_cpu);
 	if (r < 0)
 		return r;
 
@@ -3412,7 +3388,7 @@ static int __init __do_tdx_bringup(void)
 
 	r = tdx_enable();
 	if (r)
-		__do_tdx_cleanup();
+		__tdx_cleanup();
 
 	return r;
 }
@@ -3448,10 +3424,7 @@ static int __init __tdx_bringup(void)
 	if (r)
 		return r;
 
-	cpus_read_lock();
 	r = __do_tdx_bringup();
-	cpus_read_unlock();
-
 	if (r)
 		goto tdx_bringup_err;
 

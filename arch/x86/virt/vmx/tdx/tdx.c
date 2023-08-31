@@ -147,11 +147,9 @@ out:
  * global initialization SEAMCALL if not done) on local cpu to make this
  * cpu be ready to run any other SEAMCALLs.
  *
- * Always call this function via IPI function calls.
- *
  * Return 0 on success, otherwise errors.
  */
-int tdx_cpu_enable(void)
+static int tdx_cpu_enable(void)
 {
 	struct tdx_module_args args = {};
 	int ret;
@@ -181,7 +179,21 @@ int tdx_cpu_enable(void)
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(tdx_cpu_enable);
+
+static int tdx_online_cpu(unsigned int cpu)
+{
+	unsigned long flags;
+	int r;
+
+	/* Sanity check CPU is already in post-VMXON */
+	WARN_ON_ONCE(!(cr4_read_shadow() & X86_CR4_VMXE));
+
+	local_irq_save(flags);
+	r = tdx_cpu_enable();
+	local_irq_restore(flags);
+
+	return r;
+}
 
 /*
  * Add a memory region as a TDX memory block.  The caller must make sure
@@ -1158,25 +1170,35 @@ static int __tdx_enable(void)
 {
 	int ret;
 
+	lockdep_assert_cpus_held();
+
+	ret = cpuhp_setup_state_cpuslocked(CPUHP_AP_X86_INTEL_TDX_ONLINE,
+					   "x86/tdx:online", tdx_online_cpu, NULL);
+	if (ret) {
+		pr_err("Failed to register CPU hotplug callback: %d\n", ret);
+		goto out;
+	}
+
 	ret = init_tdx_module();
 	if (ret) {
 		pr_err("module initialization failed (%d)\n", ret);
-		tdx_module_status = TDX_MODULE_ERROR;
-		return ret;
+		goto remove_cpuhp;
 	}
 
 	pr_info("module initialized\n");
 	tdx_module_status = TDX_MODULE_INITIALIZED;
 
 	return 0;
+
+remove_cpuhp:
+	cpuhp_remove_state_nocalls_cpuslocked(CPUHP_AP_X86_INTEL_TDX_ONLINE);
+out:
+	tdx_module_status = TDX_MODULE_ERROR;
+	return ret;
 }
 
 /**
  * tdx_enable - Enable TDX module to make it ready to run TDX guests
- *
- * This function assumes the caller has: 1) held read lock of CPU hotplug
- * lock to prevent any new cpu from becoming online; 2) done both VMXON
- * and tdx_cpu_enable() on all online cpus.
  *
  * This function requires there's at least one online cpu for each CPU
  * package to succeed.
@@ -1192,9 +1214,8 @@ int tdx_enable(void)
 	if (!boot_cpu_has(X86_FEATURE_TDX_HOST_PLATFORM))
 		return -ENODEV;
 
-	lockdep_assert_cpus_held();
-
-	mutex_lock(&tdx_module_lock);
+	guard(cpus_read_lock)();
+	guard(mutex)(&tdx_module_lock);
 
 	switch (tdx_module_status) {
 	case TDX_MODULE_UNINITIALIZED:
@@ -1209,8 +1230,6 @@ int tdx_enable(void)
 		ret = -EINVAL;
 		break;
 	}
-
-	mutex_unlock(&tdx_module_lock);
 
 	return ret;
 }
