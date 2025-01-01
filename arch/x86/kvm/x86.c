@@ -84,6 +84,7 @@
 #include <asm/intel_pt.h>
 #include <asm/emulate_prefix.h>
 #include <asm/sgx.h>
+#include <asm/virtualization_common.h>
 #include <clocksource/hyperv_timer.h>
 
 #define CREATE_TRACE_POINTS
@@ -12542,12 +12543,22 @@ EXPORT_SYMBOL_GPL(kvm_vcpu_deliver_sipi_vector);
 
 int kvm_arch_enable_virtualization(void)
 {
+	int ret;
+
+	if (is_vmx_supported()) {
+		ret = alloc_kvm_area();
+		if (ret)
+			return ret;
+	}
+
 	cpu_emergency_register_virt_callback(kvm_x86_ops.emergency_disable_virtualization_cpu);
 	return 0;
 }
 
 void kvm_arch_disable_virtualization(void)
 {
+	if (is_vmx_supported())
+		free_kvm_area();
 	cpu_emergency_unregister_virt_callback(kvm_x86_ops.emergency_disable_virtualization_cpu);
 }
 

@@ -2,11 +2,14 @@
 #ifndef ARCH_X86_VIRTUALIZATION_COMMON_H
 #define ARCH_X86_VIRTUALIZATION_COMMON_H
 
+#include <linux/percpu-defs.h>
 #include <linux/preempt.h>
 
 #include <asm/cpuid.h>
 #include <asm/processor.h>
 #include <asm/tlbflush.h>
+
+DECLARE_PER_CPU(struct vmcs *, vmxarea);
 
 static inline int cpu_vmxon(u64 vmxon_pointer)
 {

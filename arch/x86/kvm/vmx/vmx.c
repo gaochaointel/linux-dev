@@ -469,7 +469,6 @@ noinline void invept_error(unsigned long ext, u64 eptp)
 	vmx_insn_failed("invept failed: ext=0x%lx eptp=%llx\n", ext, eptp);
 }
 
-static DEFINE_PER_CPU(struct vmcs *, vmxarea);
 DEFINE_PER_CPU(struct vmcs *, current_vmcs);
 /*
  * We maintain a per-CPU linked-list of VMCS loaded on that CPU. This is needed
@@ -2868,34 +2867,6 @@ int alloc_loaded_vmcs(struct loaded_vmcs *loaded_vmcs)
 out_vmcs:
 	free_loaded_vmcs(loaded_vmcs);
 	return -ENOMEM;
-}
-
-static void free_kvm_area(void)
-{
-	int cpu;
-
-	for_each_possible_cpu(cpu) {
-		free_vmcs(per_cpu(vmxarea, cpu));
-		per_cpu(vmxarea, cpu) = NULL;
-	}
-}
-
-static __init int alloc_kvm_area(void)
-{
-	int cpu;
-
-	for_each_possible_cpu(cpu) {
-		struct vmcs *vmcs;
-
-		vmcs = __alloc_vmcs_cpu(cpu, GFP_KERNEL);
-		if (!vmcs) {
-			free_kvm_area();
-			return -ENOMEM;
-		}
-
-		per_cpu(vmxarea, cpu) = vmcs;
-	}
-	return 0;
 }
 
 static void fix_pmode_seg(struct kvm_vcpu *vcpu, int seg,
@@ -8130,8 +8101,6 @@ void vmx_hardware_unsetup(void)
 
 	if (nested)
 		nested_vmx_hardware_unsetup();
-
-	free_kvm_area();
 }
 
 void vmx_vm_destroy(struct kvm *kvm)
@@ -8425,10 +8394,6 @@ __init int vmx_hardware_setup(void)
 
 	vmx_set_cpu_caps();
 
-	r = alloc_kvm_area();
-	if (r && nested)
-		nested_vmx_hardware_unsetup();
-
 	kvm_set_posted_intr_wakeup_handler(pi_wakeup_handler);
 
 	/*
@@ -8452,7 +8417,8 @@ __init int vmx_hardware_setup(void)
 	if (!static_cpu_has(X86_FEATURE_SELFSNOOP))
 		kvm_caps.supported_quirks &= ~KVM_X86_QUIRK_IGNORE_GUEST_PAT;
        kvm_caps.inapplicable_quirks &= ~KVM_X86_QUIRK_IGNORE_GUEST_PAT;
-	return r;
+
+	return 0;
 }
 
 static void vmx_cleanup_l1d_flush(void)
