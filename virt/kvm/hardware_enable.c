@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
+#include <linux/cleanup.h>
+#include <linux/cpu.h>
 #include <linux/types.h>
 #include <linux/module.h>
 #include <linux/percpu-defs.h>
@@ -6,6 +8,7 @@
 #include <linux/syscore_ops.h>
 #include <linux/cpuhotplug.h>
 #include <linux/kvm_hardware_enable.h>
+#include <linux/notifier.h>
 
 bool enable_virt_at_load = true;
 module_param(enable_virt_at_load, bool, 0444);
@@ -14,6 +17,7 @@ EXPORT_SYMBOL_GPL(enable_virt_at_load);
 __visible bool kvm_rebooting;
 EXPORT_SYMBOL_GPL(kvm_rebooting);
 
+static RAW_NOTIFIER_HEAD(kvm_virt_notifier_head);
 static DEFINE_PER_CPU(bool, virtualization_enabled);
 static DEFINE_MUTEX(kvm_usage_lock);
 static int kvm_usage_count;
@@ -39,6 +43,9 @@ static int kvm_enable_virtualization_cpu(void)
 		return -EIO;
 	}
 
+	raw_notifier_call_chain_robust(&kvm_virt_notifier_head, KVM_VIRT_ENABLE,
+				       KVM_VIRT_DISABLE, NULL);
+
 	__this_cpu_write(virtualization_enabled, true);
 	return 0;
 }
@@ -58,6 +65,7 @@ static void kvm_disable_virtualization_cpu(void *ign)
 	if (!__this_cpu_read(virtualization_enabled))
 		return;
 
+	raw_notifier_call_chain(&kvm_virt_notifier_head, KVM_VIRT_DISABLE, NULL);
 	kvm_arch_disable_virtualization_cpu();
 
 	__this_cpu_write(virtualization_enabled, false);
@@ -193,4 +201,100 @@ void kvm_uninit_virtualization(void)
 {
 	if (enable_virt_at_load)
 		kvm_disable_virtualization();
+}
+
+struct kvm_virt_notify_enable_arg {
+	struct notifier_block *nb;
+	cpumask_var_t mask;
+	int err;
+};
+
+static void kvm_virt_notify_enable(void *param)
+{
+	struct kvm_virt_notify_enable_arg *arg = param;
+	struct notifier_block *nb = arg->nb;
+	int ret;
+
+	WARN_ON_ONCE(!__this_cpu_read(virtualization_enabled));
+
+	ret = nb->notifier_call(nb, KVM_VIRT_ENABLE, NULL);
+	ret = notifier_to_errno(ret);
+
+	if (ret) {
+		if (!arg->err)
+			arg->err = ret;
+
+		nb->notifier_call(nb, KVM_VIRT_DISABLE, NULL);
+		cpumask_set_cpu(smp_processor_id(), arg->mask);
+	}
+}
+
+static void kvm_virt_notify_disable(void *param)
+{
+	struct kvm_virt_notify_enable_arg *arg = param;
+	struct notifier_block *nb = arg->nb;
+
+	WARN_ON_ONCE(!__this_cpu_read(virtualization_enabled));
+
+	nb->notifier_call(nb, KVM_VIRT_DISABLE, NULL);
+}
+
+int register_kvm_virt_notifier(struct notifier_block *nb)
+{
+	struct kvm_virt_notify_enable_arg arg;
+	int ret;
+
+	guard(mutex)(&kvm_usage_lock);
+	guard(cpus_read_lock)();
+
+	// Check SYSTEM_HALT/RESTART/POWER_OFF like kvm_enable_virtualization()?
+
+	ret = raw_notifier_chain_register(&kvm_virt_notifier_head, nb);
+	if (ret)
+		return ret;
+
+	/* No extra work if virtualization isn't enabled */
+	if (!kvm_usage_count)
+		return 0;
+
+	if (!zalloc_cpumask_var(&arg.mask, GFP_KERNEL))
+		goto out;
+
+	arg.err = 0;
+	arg.nb = nb;
+
+	on_each_cpu(kvm_virt_notify_enable, &arg, 1);
+	ret = arg.err;
+
+	/* Unwind if some CPUs encounterred errors */
+	if (!cpumask_equal(cpu_online_mask, arg.mask)) {
+		on_each_cpu_mask(arg.mask, kvm_virt_notify_disable, NULL, 1);
+		goto out;
+	}
+
+	return 0;
+
+out:
+	raw_notifier_chain_unregister(&kvm_virt_notifier_head, nb);
+	return ret;
+}
+
+int unregister_kvm_virt_notifier(struct notifier_block *nb)
+{
+	struct kvm_virt_notify_enable_arg arg;
+	int ret;
+
+	guard(mutex)(&kvm_usage_lock);
+	guard(cpus_read_lock)();
+
+	ret = raw_notifier_chain_unregister(&kvm_virt_notifier_head, nb);
+	if (ret)
+		return ret;
+
+	arg.err = 0;
+	arg.nb = nb;
+	if (kvm_usage_count)
+		on_each_cpu(kvm_virt_notify_disable, &arg, 1);
+
+	return 0;
 }
