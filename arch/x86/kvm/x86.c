@@ -12552,27 +12552,6 @@ void kvm_vcpu_deliver_sipi_vector(struct kvm_vcpu *vcpu, u8 vector)
 }
 EXPORT_SYMBOL_GPL(kvm_vcpu_deliver_sipi_vector);
 
-int kvm_arch_enable_virtualization(void)
-{
-	int ret;
-
-	if (is_vmx_supported()) {
-		ret = alloc_kvm_area();
-		if (ret)
-			return ret;
-	}
-
-	cpu_emergency_register_virt_callback(kvm_emergency_disable_virtualization_cpu);
-	return 0;
-}
-
-void kvm_arch_disable_virtualization(void)
-{
-	if (is_vmx_supported())
-		free_kvm_area();
-	cpu_emergency_unregister_virt_callback(kvm_emergency_disable_virtualization_cpu);
-}
-
 static int kvm_x86_enable_virtualization_cpu(void)
 {
 	struct kvm *kvm;

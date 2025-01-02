@@ -698,7 +698,5 @@ int ____kvm_emulate_hypercall(struct kvm_vcpu *vcpu, int cpl,
 })
 
 int kvm_emulate_hypercall(struct kvm_vcpu *vcpu);
-int alloc_kvm_area(void);
-void free_kvm_area(void);
 
 #endif

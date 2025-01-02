@@ -5,6 +5,7 @@
 #include <linux/kvm_hardware_enable.h>
 #include <asm/page.h>
 #include <asm/perf_event.h>
+#include <asm/reboot.h>
 #include <asm/vmx.h>
 #include <asm/virtualization_common.h>
 
@@ -12,7 +13,7 @@
 
 static DEFINE_PER_CPU(struct vmcs *, vmxarea);
 
-void free_kvm_area(void)
+static void free_kvm_area(void)
 {
 	int cpu;
 
@@ -42,7 +43,7 @@ static struct vmcs *__alloc_vmcs_cpu(int cpu, gfp_t flags)
 	return vmcs;
 }
 
-int alloc_kvm_area(void)
+static int alloc_kvm_area(void)
 {
 	int cpu;
 
@@ -85,4 +86,26 @@ void vmx_off(void)
 	if (cpu_vmxoff())
 		kvm_spurious_fault();
 	intel_pt_handle_vmx(0);
+
+}
+
+int kvm_arch_enable_virtualization(void)
+{
+	int ret;
+
+	if (is_vmx_supported()) {
+		ret = alloc_kvm_area();
+		if (ret)
+			return ret;
+	}
+
+	cpu_emergency_register_virt_callback(kvm_emergency_disable_virtualization_cpu);
+	return 0;
+}
+
+void kvm_arch_disable_virtualization(void)
+{
+	if (is_vmx_supported())
+		free_kvm_area();
+	cpu_emergency_unregister_virt_callback(kvm_emergency_disable_virtualization_cpu);
 }
