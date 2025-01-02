@@ -81,6 +81,20 @@ static int vmx_on(void)
 	return 0;
 }
 
+/*
+ * Handle a fault on a hardware virtualization (VMX or SVM) instruction.
+ *
+ * Hardware virtualization extension instructions may fault if a reboot turns
+ * off virtualization while processes are running.  Usually after catching the
+ * fault we just panic; during reboot instead the instruction is ignored.
+ */
+noinstr void kvm_spurious_fault(void)
+{
+	/* Fault while not rebooting.  We want the trace. */
+	BUG_ON(!kvm_rebooting);
+}
+EXPORT_SYMBOL_GPL(kvm_spurious_fault);
+
 static void vmx_off(void)
 {
 	if (cpu_vmxoff())

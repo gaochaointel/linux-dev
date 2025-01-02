@@ -686,20 +686,6 @@ static void drop_user_return_notifiers(void)
 		kvm_on_user_return(&msrs->urn);
 }
 
-/*
- * Handle a fault on a hardware virtualization (VMX or SVM) instruction.
- *
- * Hardware virtualization extension instructions may fault if a reboot turns
- * off virtualization while processes are running.  Usually after catching the
- * fault we just panic; during reboot instead the instruction is ignored.
- */
-noinstr void kvm_spurious_fault(void)
-{
-	/* Fault while not rebooting.  We want the trace. */
-	BUG_ON(!kvm_rebooting);
-}
-EXPORT_SYMBOL_GPL(kvm_spurious_fault);
-
 #define EXCPT_BENIGN		0
 #define EXCPT_CONTRIBUTORY	1
 #define EXCPT_PF		2
