@@ -8,6 +8,7 @@
 enum kvm_virt_event {
 	KVM_VIRT_ENABLE,
 	KVM_VIRT_DISABLE,
+	KVM_VIRT_EMERGENCY_DISABLE,
 };
 
 #ifdef CONFIG_KVM_GENERIC_HARDWARE_ENABLING
@@ -36,6 +37,7 @@ int kvm_init_virtualization(void);
 void kvm_uninit_virtualization(void);
 int register_kvm_virt_notifier(struct notifier_block *nb);
 int unregister_kvm_virt_notifier(struct notifier_block *nb);
+void kvm_emergency_disable_virtualization_cpu(void);
 #else
 static inline int kvm_enable_virtualization(void) { return 0; }
 static inline void kvm_disable_virtualization(void) { }
@@ -43,6 +45,7 @@ static inline int kvm_init_virtualization(void) { return 0; }
 static inline void kvm_uninit_virtualization(void) { }
 static inline int register_kvm_virt_notifier(struct notifier_block *nb) { return 0; }
 static inline int unregister_kvm_virt_notifier(struct notifier_block *nb) { return 0; }
+static inline void kvm_emergency_disable_virtualization_cpu(void) { }
 #endif
 
 #endif

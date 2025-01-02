@@ -71,6 +71,13 @@ static void kvm_disable_virtualization_cpu(void *ign)
 	__this_cpu_write(virtualization_enabled, false);
 }
 
+void kvm_emergency_disable_virtualization_cpu(void)
+{
+	guard(mutex)(&kvm_usage_lock);
+	guard(cpus_read_lock)();
+	raw_notifier_call_chain(&kvm_virt_notifier_head, KVM_VIRT_EMERGENCY_DISABLE, NULL);
+}
+
 static int kvm_offline_cpu(unsigned int cpu)
 {
 	kvm_disable_virtualization_cpu(NULL);

@@ -12562,7 +12562,7 @@ int kvm_arch_enable_virtualization(void)
 			return ret;
 	}
 
-	cpu_emergency_register_virt_callback(kvm_x86_ops.emergency_disable_virtualization_cpu);
+	cpu_emergency_register_virt_callback(kvm_emergency_disable_virtualization_cpu);
 	return 0;
 }
 
@@ -12570,7 +12570,7 @@ void kvm_arch_disable_virtualization(void)
 {
 	if (is_vmx_supported())
 		free_kvm_area();
-	cpu_emergency_unregister_virt_callback(kvm_x86_ops.emergency_disable_virtualization_cpu);
+	cpu_emergency_unregister_virt_callback(kvm_emergency_disable_virtualization_cpu);
 }
 
 static int kvm_x86_enable_virtualization_cpu(void)
@@ -12702,6 +12702,10 @@ static int kvm_x86_virt_notifier_call(struct notifier_block *nb, unsigned long v
 		break;
 	case KVM_VIRT_DISABLE:
 		kvm_x86_disable_virtualization_cpu();
+		ret = 0;
+		break;
+	case KVM_VIRT_EMERGENCY_DISABLE:
+		kvm_x86_call(emergency_disable_virtualization_cpu)();
 		ret = 0;
 		break;
 	default:
