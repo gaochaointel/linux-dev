@@ -75,7 +75,11 @@ void kvm_emergency_disable_virtualization_cpu(void)
 {
 	guard(mutex)(&kvm_usage_lock);
 	guard(cpus_read_lock)();
+
+	kvm_rebooting = true;
+
 	raw_notifier_call_chain(&kvm_virt_notifier_head, KVM_VIRT_EMERGENCY_DISABLE, NULL);
+	kvm_arch_disable_virtualization_cpu();
 }
 
 static int kvm_offline_cpu(unsigned int cpu)
