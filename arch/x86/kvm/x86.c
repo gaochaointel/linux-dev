@@ -9699,7 +9699,7 @@ int kvm_x86_vendor_init(struct kvm_x86_init_ops *ops)
 			goto out_unwind_ops;
 	}
 
-	r = register_kvm_virt_notifier(&kvm_x86_virt_nb);
+	r = register_virt_notifier(&kvm_x86_virt_nb);
 	if (r < 0)
 		goto out_unwind_ops;
 
@@ -9779,7 +9779,7 @@ void kvm_x86_vendor_exit(void)
 	irq_work_sync(&pvclock_irq_work);
 	cancel_work_sync(&pvclock_gtod_work);
 #endif
-	unregister_kvm_virt_notifier(&kvm_x86_virt_nb);
+	unregister_virt_notifier(&kvm_x86_virt_nb);
 	kvm_x86_call(hardware_unsetup)();
 	kvm_mmu_vendor_module_exit();
 	free_percpu(user_return_msrs);

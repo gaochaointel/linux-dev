@@ -81,6 +81,7 @@ void kvm_emergency_disable_virtualization_cpu(void)
 	raw_notifier_call_chain(&kvm_virt_notifier_head, KVM_VIRT_EMERGENCY_DISABLE, NULL);
 	kvm_arch_disable_virtualization_cpu();
 }
+EXPORT_SYMBOL_GPL(kvm_emergency_disable_virtualization_cpu);
 
 static int kvm_offline_cpu(unsigned int cpu)
 {
@@ -137,7 +138,7 @@ static struct syscore_ops kvm_syscore_ops = {
 	.shutdown = kvm_shutdown,
 };
 
-int kvm_enable_virtualization(void)
+int virt_enable(void)
 {
 	int r;
 
@@ -185,9 +186,9 @@ err_arch_enable:
 	--kvm_usage_count;
 	return r;
 }
-EXPORT_SYMBOL_GPL(kvm_enable_virtualization);
+EXPORT_SYMBOL_GPL(virt_enable);
 
-void kvm_disable_virtualization(void)
+void virt_disable(void)
 {
 	guard(mutex)(&kvm_usage_lock);
 
@@ -198,21 +199,23 @@ void kvm_disable_virtualization(void)
 	cpuhp_remove_state(CPUHP_AP_KVM_ONLINE);
 	kvm_arch_disable_virtualization();
 }
-EXPORT_SYMBOL_GPL(kvm_disable_virtualization);
+EXPORT_SYMBOL_GPL(virt_disable);
 
 int kvm_init_virtualization(void)
 {
 	if (enable_virt_at_load)
-		return kvm_enable_virtualization();
+		return virt_enable();
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(kvm_init_virtualization);
 
 void kvm_uninit_virtualization(void)
 {
 	if (enable_virt_at_load)
-		kvm_disable_virtualization();
+		virt_disable();
 }
+EXPORT_SYMBOL_GPL(kvm_uninit_virtualization);
 
 struct kvm_virt_notify_enable_arg {
 	struct notifier_block *nb;
@@ -250,7 +253,7 @@ static void kvm_virt_notify_disable(void *param)
 	nb->notifier_call(nb, KVM_VIRT_DISABLE, NULL);
 }
 
-int register_kvm_virt_notifier(struct notifier_block *nb)
+int register_virt_notifier(struct notifier_block *nb)
 {
 	struct kvm_virt_notify_enable_arg arg;
 	int ret;
@@ -289,8 +292,9 @@ out:
 	raw_notifier_chain_unregister(&kvm_virt_notifier_head, nb);
 	return ret;
 }
+EXPORT_SYMBOL_GPL(register_virt_notifier);
 
-int unregister_kvm_virt_notifier(struct notifier_block *nb)
+int unregister_virt_notifier(struct notifier_block *nb)
 {
 	struct kvm_virt_notify_enable_arg arg;
 	int ret;
@@ -309,3 +313,4 @@ int unregister_kvm_virt_notifier(struct notifier_block *nb)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(unregister_virt_notifier);

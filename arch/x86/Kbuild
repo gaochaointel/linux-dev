@@ -9,7 +9,7 @@ obj-y += entry/
 
 obj-$(CONFIG_PERF_EVENTS) += events/
 
-obj-$(CONFIG_KVM) += kvm/
+obj-y += kvm/
 
 # Xen paravirtualization support
 obj-$(CONFIG_XEN) += xen/

@@ -31,20 +31,20 @@ void kvm_arch_disable_virtualization(void);
  */
 int kvm_arch_enable_virtualization_cpu(void);
 void kvm_arch_disable_virtualization_cpu(void);
-int kvm_enable_virtualization(void);
-void kvm_disable_virtualization(void);
+int virt_enable(void);
+void virt_disable(void);
 int kvm_init_virtualization(void);
 void kvm_uninit_virtualization(void);
-int register_kvm_virt_notifier(struct notifier_block *nb);
-int unregister_kvm_virt_notifier(struct notifier_block *nb);
+int register_virt_notifier(struct notifier_block *nb);
+int unregister_virt_notifier(struct notifier_block *nb);
 void kvm_emergency_disable_virtualization_cpu(void);
 #else
-static inline int kvm_enable_virtualization(void) { return 0; }
-static inline void kvm_disable_virtualization(void) { }
+static inline int virt_enable(void) { return 0; }
+static inline void virt_disable(void) { }
 static inline int kvm_init_virtualization(void) { return 0; }
 static inline void kvm_uninit_virtualization(void) { }
-static inline int register_kvm_virt_notifier(struct notifier_block *nb) { return 0; }
-static inline int unregister_kvm_virt_notifier(struct notifier_block *nb) { return 0; }
+static inline int register_virt_notifier(struct notifier_block *nb) { return 0; }
+static inline int unregister_virt_notifier(struct notifier_block *nb) { return 0; }
 static inline void kvm_emergency_disable_virtualization_cpu(void) { }
 #endif
 

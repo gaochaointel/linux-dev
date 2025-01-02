@@ -1184,7 +1184,7 @@ static struct kvm *kvm_create_vm(unsigned long type, const char *fdname)
 	if (r)
 		goto out_err_no_arch_destroy_vm;
 
-	r = kvm_enable_virtualization();
+	r = virt_enable();
 	if (r)
 		goto out_err_no_disable;
 
@@ -1221,7 +1221,7 @@ out_no_coalesced_mmio:
 		mmu_notifier_unregister(&kvm->mmu_notifier, current->mm);
 #endif
 out_err_no_mmu_notifier:
-	kvm_disable_virtualization();
+	virt_disable();
 out_err_no_disable:
 	kvm_arch_destroy_vm(kvm);
 out_err_no_arch_destroy_vm:
@@ -1317,7 +1317,7 @@ static void kvm_destroy_vm(struct kvm *kvm)
 #endif
 	kvm_arch_free_vm(kvm);
 	preempt_notifier_dec();
-	kvm_disable_virtualization();
+	virt_disable();
 	mmdrop(mm);
 }
 

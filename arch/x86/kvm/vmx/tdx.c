@@ -3466,7 +3466,7 @@ static int __init __tdx_bringup(void)
 	 * Enabling TDX requires enabling hardware virtualization first,
 	 * as making SEAMCALLs requires CPU being in post-VMXON state.
 	 */
-	r = kvm_enable_virtualization();
+	r = virt_enable();
 	if (r)
 		return r;
 
@@ -3543,7 +3543,7 @@ static int __init __tdx_bringup(void)
 get_sysinfo_err:
 	__tdx_cleanup();
 tdx_bringup_err:
-	kvm_disable_virtualization();
+	virt_disable();
 	return r;
 }
 
@@ -3552,7 +3552,7 @@ void tdx_cleanup(void)
 	if (enable_tdx) {
 		misc_cg_set_capacity(MISC_CG_RES_TDX, 0);
 		__tdx_cleanup();
-		kvm_disable_virtualization();
+		virt_disable();
 	}
 }
 
