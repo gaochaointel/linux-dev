@@ -9612,6 +9612,12 @@ static void kvm_x86_check_cpu_compat(void *ret)
 	*(int *)ret = kvm_x86_check_processor_compatibility();
 }
 
+static int kvm_x86_virt_notifier_call(struct notifier_block *nb, unsigned long val,
+				      void *data);
+struct notifier_block kvm_x86_virt_nb = {
+	.notifier_call = kvm_x86_virt_notifier_call
+};
+
 int kvm_x86_vendor_init(struct kvm_x86_init_ops *ops)
 {
 	u64 host_pat;
@@ -9707,6 +9713,10 @@ int kvm_x86_vendor_init(struct kvm_x86_init_ops *ops)
 			goto out_unwind_ops;
 	}
 
+	r = register_kvm_virt_notifier(&kvm_x86_virt_nb);
+	if (r < 0)
+		goto out_unwind_ops;
+
 	/*
 	 * Point of no return!  DO NOT add error paths below this point unless
 	 * absolutely necessary, as most operations from this point forward
@@ -9783,6 +9793,7 @@ void kvm_x86_vendor_exit(void)
 	irq_work_sync(&pvclock_irq_work);
 	cancel_work_sync(&pvclock_gtod_work);
 #endif
+	unregister_kvm_virt_notifier(&kvm_x86_virt_nb);
 	kvm_x86_call(hardware_unsetup)();
 	kvm_mmu_vendor_module_exit();
 	free_percpu(user_return_msrs);
@@ -12660,15 +12671,12 @@ static int kvm_x86_enable_virtualization_cpu(void)
 
 int kvm_arch_enable_virtualization_cpu(void)
 {
-	int ret;
+	int ret = 0;
 
-	if (is_vmx_supported()) {
+	if (is_vmx_supported())
 		ret = vmx_on();
-		if (ret)
-			return ret;
-	}
 
-	return kvm_x86_enable_virtualization_cpu();
+	return ret;
 }
 
 static void kvm_x86_disable_virtualization_cpu(void)
@@ -12679,9 +12687,28 @@ static void kvm_x86_disable_virtualization_cpu(void)
 
 void kvm_arch_disable_virtualization_cpu(void)
 {
-	kvm_x86_disable_virtualization_cpu();
 	if (is_vmx_supported())
 		vmx_off();
+}
+
+static int kvm_x86_virt_notifier_call(struct notifier_block *nb, unsigned long val,
+				      void *data)
+{
+	int ret = -EINVAL;
+
+	switch(val) {
+	case KVM_VIRT_ENABLE:
+		ret = kvm_x86_enable_virtualization_cpu();
+		break;
+	case KVM_VIRT_DISABLE:
+		kvm_x86_disable_virtualization_cpu();
+		ret = 0;
+		break;
+	default:
+		break;
+	};
+
+	return notifier_from_errno(ret);
 }
 
 bool kvm_vcpu_is_reset_bsp(struct kvm_vcpu *vcpu)
