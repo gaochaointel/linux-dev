@@ -51,8 +51,6 @@ fault:
 	cr4_clear_bits(X86_CR4_VMXE);
 	return -EIO;
 }
-int vmx_on(void);
-void vmx_off(void);
 
 static inline bool __is_vmx_supported(void)
 {

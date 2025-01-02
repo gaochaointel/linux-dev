@@ -61,7 +61,7 @@ static int alloc_kvm_area(void)
 	return 0;
 }
 
-int vmx_on(void)
+static int vmx_on(void)
 {
 	int cpu = raw_smp_processor_id();
 	u64 phys_addr = __pa(per_cpu(vmxarea, cpu));
@@ -81,12 +81,11 @@ int vmx_on(void)
 	return 0;
 }
 
-void vmx_off(void)
+static void vmx_off(void)
 {
 	if (cpu_vmxoff())
 		kvm_spurious_fault();
 	intel_pt_handle_vmx(0);
-
 }
 
 int kvm_arch_enable_virtualization(void)
@@ -108,4 +107,20 @@ void kvm_arch_disable_virtualization(void)
 	if (is_vmx_supported())
 		free_kvm_area();
 	cpu_emergency_unregister_virt_callback(kvm_emergency_disable_virtualization_cpu);
+}
+
+int kvm_arch_enable_virtualization_cpu(void)
+{
+	int ret = 0;
+
+	if (is_vmx_supported())
+		ret = vmx_on();
+
+	return ret;
+}
+
+void kvm_arch_disable_virtualization_cpu(void)
+{
+	if (is_vmx_supported())
+		vmx_off();
 }

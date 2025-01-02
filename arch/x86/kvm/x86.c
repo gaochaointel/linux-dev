@@ -12648,26 +12648,10 @@ static int kvm_x86_enable_virtualization_cpu(void)
 	return 0;
 }
 
-int kvm_arch_enable_virtualization_cpu(void)
-{
-	int ret = 0;
-
-	if (is_vmx_supported())
-		ret = vmx_on();
-
-	return ret;
-}
-
 static void kvm_x86_disable_virtualization_cpu(void)
 {
 	kvm_x86_call(disable_virtualization_cpu)();
 	drop_user_return_notifiers();
-}
-
-void kvm_arch_disable_virtualization_cpu(void)
-{
-	if (is_vmx_supported())
-		vmx_off();
 }
 
 static int kvm_x86_virt_notifier_call(struct notifier_block *nb, unsigned long val,
