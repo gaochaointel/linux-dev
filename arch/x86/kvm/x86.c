@@ -12562,7 +12562,7 @@ void kvm_arch_disable_virtualization(void)
 	cpu_emergency_unregister_virt_callback(kvm_x86_ops.emergency_disable_virtualization_cpu);
 }
 
-int kvm_arch_enable_virtualization_cpu(void)
+static int kvm_x86_enable_virtualization_cpu(void)
 {
 	struct kvm *kvm;
 	struct kvm_vcpu *vcpu;
@@ -12658,10 +12658,30 @@ int kvm_arch_enable_virtualization_cpu(void)
 	return 0;
 }
 
-void kvm_arch_disable_virtualization_cpu(void)
+int kvm_arch_enable_virtualization_cpu(void)
+{
+	int ret;
+
+	if (is_vmx_supported()) {
+		ret = vmx_on();
+		if (ret)
+			return ret;
+	}
+
+	return kvm_x86_enable_virtualization_cpu();
+}
+
+static void kvm_x86_disable_virtualization_cpu(void)
 {
 	kvm_x86_call(disable_virtualization_cpu)();
 	drop_user_return_notifiers();
+}
+
+void kvm_arch_disable_virtualization_cpu(void)
+{
+	kvm_x86_disable_virtualization_cpu();
+	if (is_vmx_supported())
+		vmx_off();
 }
 
 bool kvm_vcpu_is_reset_bsp(struct kvm_vcpu *vcpu)

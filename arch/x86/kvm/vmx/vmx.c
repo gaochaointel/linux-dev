@@ -2738,11 +2738,6 @@ int vmx_check_processor_compat(void)
 int vmx_enable_virtualization_cpu(void)
 {
 	int cpu = raw_smp_processor_id();
-	u64 phys_addr = __pa(per_cpu(vmxarea, cpu));
-	int r;
-
-	if (cr4_read_shadow() & X86_CR4_VMXE)
-		return -EBUSY;
 
 	/*
 	 * This can happen if we hot-added a CPU but failed to allocate
@@ -2750,14 +2745,6 @@ int vmx_enable_virtualization_cpu(void)
 	 */
 	if (kvm_is_using_evmcs() && !hv_get_vp_assist_page(cpu))
 		return -EFAULT;
-
-	intel_pt_handle_vmx(1);
-
-	r = cpu_vmxon(phys_addr);
-	if (r) {
-		intel_pt_handle_vmx(0);
-		return r;
-	}
 
 	return 0;
 }
@@ -2775,13 +2762,7 @@ static void vmclear_local_loaded_vmcss(void)
 void vmx_disable_virtualization_cpu(void)
 {
 	vmclear_local_loaded_vmcss();
-
-	if (cpu_vmxoff())
-		kvm_spurious_fault();
-
 	hv_reset_evmcs();
-
-	intel_pt_handle_vmx(0);
 }
 
 static struct vmcs *__alloc_vmcs_cpu(int cpu, gfp_t flags)

@@ -9,8 +9,6 @@
 #include <asm/processor.h>
 #include <asm/tlbflush.h>
 
-DECLARE_PER_CPU(struct vmcs *, vmxarea);
-
 static inline int cpu_vmxon(u64 vmxon_pointer)
 {
 	u64 msr;
@@ -53,6 +51,8 @@ fault:
 	cr4_clear_bits(X86_CR4_VMXE);
 	return -EIO;
 }
+int vmx_on(void);
+void vmx_off(void);
 
 static inline bool __is_vmx_supported(void)
 {

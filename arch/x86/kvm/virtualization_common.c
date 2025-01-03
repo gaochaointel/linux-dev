@@ -10,8 +10,7 @@
 
 #include "x86.h"
 
-DEFINE_PER_CPU(struct vmcs *, vmxarea);
-EXPORT_PER_CPU_SYMBOL_GPL(vmxarea);
+static DEFINE_PER_CPU(struct vmcs *, vmxarea);
 
 void free_kvm_area(void)
 {
@@ -59,4 +58,31 @@ int alloc_kvm_area(void)
 		per_cpu(vmxarea, cpu) = vmcs;
 	}
 	return 0;
+}
+
+int vmx_on(void)
+{
+	int cpu = raw_smp_processor_id();
+	u64 phys_addr = __pa(per_cpu(vmxarea, cpu));
+	int r;
+
+	if (cr4_read_shadow() & X86_CR4_VMXE)
+		return -EBUSY;
+
+	intel_pt_handle_vmx(1);
+
+	r = cpu_vmxon(phys_addr);
+	if (r) {
+		intel_pt_handle_vmx(0);
+		return r;
+	}
+
+	return 0;
+}
+
+void vmx_off(void)
+{
+	if (cpu_vmxoff())
+		kvm_spurious_fault();
+	intel_pt_handle_vmx(0);
 }
