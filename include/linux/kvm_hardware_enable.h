@@ -14,7 +14,7 @@ extern bool kvm_rebooting;
  * kvm_usage_count, i.e. at the beginning of the generic hardware enabling
  * sequence, and at the end of the generic hardware disabling sequence.
  */
-void kvm_arch_enable_virtualization(void);
+int kvm_arch_enable_virtualization(void);
 void kvm_arch_disable_virtualization(void);
 /*
  * kvm_arch_{enable,disable}_virtualization_cpu() are called on "every" CPU to
