@@ -2,6 +2,9 @@
 #ifndef ARCH_X86_VIRTUALIZATION_COMMON_H
 #define ARCH_X86_VIRTUALIZATION_COMMON_H
 
+#include <linux/preempt.h>
+
+#include <asm/cpuid.h>
 #include <asm/processor.h>
 #include <asm/tlbflush.h>
 
@@ -46,6 +49,35 @@ static inline int cpu_vmxoff(void)
 fault:
 	cr4_clear_bits(X86_CR4_VMXE);
 	return -EIO;
+}
+
+static inline bool __is_vmx_supported(void)
+{
+	int cpu = smp_processor_id();
+
+	if (!(cpuid_ecx(1) & BIT(5))) {
+		pr_err("VMX not supported by CPU %d\n", cpu);
+		return false;
+	}
+
+	if (!this_cpu_has(X86_FEATURE_MSR_IA32_FEAT_CTL) ||
+	    !this_cpu_has(X86_FEATURE_VMX)) {
+		pr_err("VMX not enabled (by BIOS) in MSR_IA32_FEAT_CTL on CPU %d\n", cpu);
+		return false;
+	}
+
+	return true;
+}
+
+static inline bool is_vmx_supported(void)
+{
+	bool supported;
+
+	migrate_disable();
+	supported = __is_vmx_supported();
+	migrate_enable();
+
+	return supported;
 }
 
 #endif
