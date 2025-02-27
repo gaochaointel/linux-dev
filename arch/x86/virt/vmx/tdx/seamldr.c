@@ -202,6 +202,7 @@ enum module_update_state {
 	MODULE_UPDATE_SHUTDOWN,
 	MODULE_UPDATE_CPU_INSTALL,
 	MODULE_UPDATE_CPU_INIT,
+	MODULE_UPDATE_RUN_UPDATE,
 	MODULE_UPDATE_DONE,
 };
 
@@ -264,6 +265,10 @@ static int do_seamldr_install_module(void *seamldr_params)
 				break;
 			case MODULE_UPDATE_CPU_INIT:
 				ret = tdx_cpu_enable();
+				break;
+			case MODULE_UPDATE_RUN_UPDATE:
+				if (primary)
+					ret = tdx_module_run_update();
 				break;
 			default:
 				break;
