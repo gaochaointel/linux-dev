@@ -236,6 +236,7 @@ enum tdp_state {
 	TDP_SHUTDOWN,
 	TDP_CPU_INSTALL,
 	TDP_CPU_INIT,
+	TDP_RUN_UPDATE,
 	TDP_DONE,
 };
 
@@ -309,6 +310,10 @@ static int do_seamldr_install_module(void *params)
 				break;
 			case TDP_CPU_INIT:
 				ret = tdx_cpu_enable();
+				break;
+			case TDP_RUN_UPDATE:
+				if (primary)
+					ret = tdx_module_run_update();
 				break;
 			default:
 				break;
