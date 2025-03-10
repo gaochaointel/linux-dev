@@ -121,5 +121,6 @@ struct tdmr_info_list {
 
 int tdx_module_shutdown(void);
 void tdx_module_set_error(void);
+int tdx_cpu_enable(void);
 
 #endif

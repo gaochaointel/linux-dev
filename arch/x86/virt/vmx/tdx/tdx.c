@@ -106,7 +106,7 @@ out:
  *
  * Return 0 on success, otherwise errors.
  */
-static int tdx_cpu_enable(void)
+int tdx_cpu_enable(void)
 {
 	struct tdx_module_args args = {};
 	int ret;
