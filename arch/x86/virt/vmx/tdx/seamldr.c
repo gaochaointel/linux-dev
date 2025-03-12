@@ -222,6 +222,11 @@ static void ack_state(void)
 		set_target_state(update_data.state + 1);
 }
 
+static void print_update_failure_message(void)
+{
+	pr_err_once("update failed, SEAMCALLs will report failure until TDs killed\n");
+}
+
 /*
  * See multi_cpu_stop() from where this multi-cpu state-machine was
  * adopted, and the rationale for touch_nmi_watchdog().
@@ -266,6 +271,8 @@ static int do_seamldr_install_module(void *seamldr_params)
 			if (ret) {
 				scoped_guard(raw_spinlock, &update_data.lock)
 					update_data.failed++;
+				if (curstate > MODULE_UPDATE_SHUTDOWN)
+					print_update_failure_message();
 			} else {
 				ack_state();
 			}
