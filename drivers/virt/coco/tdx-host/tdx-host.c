@@ -37,6 +37,10 @@ static ssize_t version_show(struct device *dev, struct device_attribute *attr,
 	const struct tdx_sys_info *tdx_sysinfo = tdx_get_sysinfo();
 	const struct tdx_sys_info_version *ver;
 
+	/*
+	 * Inform userspace that the TDX module isn't in a usable state,
+	 * possibly due to a failed update.
+	 */
 	if (!tdx_sysinfo)
 		return -ENXIO;
 
