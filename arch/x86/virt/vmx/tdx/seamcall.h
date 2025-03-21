@@ -14,6 +14,19 @@ u64 __seamcall_saved_ret(u64 fn, struct tdx_module_args *args);
 
 typedef u64 (*sc_func_t)(u64 fn, struct tdx_module_args *args);
 
+static inline bool is_seamldr_call(u64 fn)
+{
+	return fn & SEAMLDR_SEAMCALL_MASK;
+}
+
+static inline bool sc_need_retry(u64 fn, u64 error_code)
+{
+	if (is_seamldr_call(fn))
+		return error_code == SEAMLDR_RND_NO_ENTROPY;
+	else
+		return error_code == TDX_RND_NO_ENTROPY;
+}
+
 static __always_inline u64 sc_retry(sc_func_t func, u64 fn,
 			   struct tdx_module_args *args)
 {
@@ -22,7 +35,7 @@ static __always_inline u64 sc_retry(sc_func_t func, u64 fn,
 
 	do {
 		ret = func(fn, args);
-	} while (ret == TDX_RND_NO_ENTROPY && --retry);
+	} while (sc_need_retry(fn, ret) && --retry);
 
 	return ret;
 }
@@ -46,6 +59,17 @@ static inline void seamcall_err_ret(u64 fn, u64 err,
 			args->rcx, args->rdx, args->r8);
 	pr_err("R09 %#016llx R10 %#016llx R11 %#016llx\n",
 			args->r9, args->r10, args->r11);
+}
+
+static inline void seamldr_err(u64 fn, u64 err, struct tdx_module_args *args)
+{
+	/*
+	 * Get the actual leaf number. No need to print the bit used to
+	 * differentiate between P-SEAMLDR and TDX module as the "P-SEAMLDR"
+	 * string in the error message already provides that information.
+	 */
+	fn &= ~SEAMLDR_SEAMCALL_MASK;
+	pr_err("P-SEAMLDR (%lld) failed: 0x%016llx\n", fn, err);
 }
 
 static __always_inline int sc_retry_prerr(sc_func_t func,
@@ -75,5 +99,8 @@ static __always_inline int sc_retry_prerr(sc_func_t func,
 
 #define seamcall_prerr_ret(__fn, __args)					\
 	sc_retry_prerr(__seamcall_ret, seamcall_err_ret, (__fn), (__args))
+
+#define seamldr_prerr(__fn, __args)						\
+	sc_retry_prerr(__seamcall, seamldr_err, (__fn), (__args))
 
 #endif

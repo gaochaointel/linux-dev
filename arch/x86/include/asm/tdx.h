@@ -32,6 +32,11 @@
 #define TDX_SUCCESS		0ULL
 #define TDX_RND_NO_ENTROPY	0x8000020300000000ULL
 
+/* P-SEAMLDR SEAMCALL leaf function error codes */
+#define SEAMLDR_RND_NO_ENTROPY	0x8000000000030001ULL
+
+#define SEAMLDR_SEAMCALL_MASK	_BITUL(63)
+
 #ifndef __ASSEMBLER__
 
 #include <uapi/asm/mce.h>
