@@ -34,15 +34,28 @@ static __always_inline u64 __seamcall_dirty_cache(sc_func_t func, u64 fn,
 	return func(fn, args);
 }
 
+#define SEAMLDR_RND_NO_ENTROPY	0x8000000000030001ULL
+
+#define SEAMLDR_SEAMCALL_MASK	_BITUL(63)
+
+static inline bool is_seamldr_call(u64 fn)
+{
+	return fn & SEAMLDR_SEAMCALL_MASK;
+}
+
 static __always_inline u64 sc_retry(sc_func_t func, u64 fn,
 			   struct tdx_module_args *args)
 {
+	u64 retry_code = TDX_RND_NO_ENTROPY;
 	int retry = RDRAND_RETRY_LOOPS;
 	u64 ret;
 
+	if (unlikely(is_seamldr_call(fn)))
+		retry_code = SEAMLDR_RND_NO_ENTROPY;
+
 	do {
 		ret = func(fn, args);
-	} while (ret == TDX_RND_NO_ENTROPY && --retry);
+	} while (ret == retry_code && --retry);
 
 	return ret;
 }
@@ -66,6 +79,16 @@ static inline void seamcall_err_ret(u64 fn, u64 err,
 			args->rcx, args->rdx, args->r8);
 	pr_err("R09 %#016llx R10 %#016llx R11 %#016llx\n",
 			args->r9, args->r10, args->r11);
+}
+
+static inline void seamldr_err(u64 fn, u64 err, struct tdx_module_args *args)
+{
+	/*
+	 * Note: P-SEAMLDR leaf numbers are printed in hex as they have
+	 * bit 63 set, making them hard to read and understand if printed
+	 * in decimal
+	 */
+	pr_err("P-SEAMLDR (%llx) failed: %#016llx\n", fn, err);
 }
 
 static __always_inline int sc_retry_prerr(sc_func_t func,
@@ -95,5 +118,8 @@ static __always_inline int sc_retry_prerr(sc_func_t func,
 
 #define seamcall_prerr_ret(__fn, __args)					\
 	sc_retry_prerr(__seamcall_ret, seamcall_err_ret, (__fn), (__args))
+
+#define seamldr_prerr(__fn, __args)						\
+	sc_retry_prerr(__seamcall, seamldr_err, (__fn), (__args))
 
 #endif
