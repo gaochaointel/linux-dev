@@ -8,3 +8,13 @@ config TDX_HOST_SERVICES
 
 	  Say y or m if enabling support for confidential virtual machine
 	  support (CONFIG_INTEL_TDX_HOST). The module is called tdx_host.ko
+
+config INTEL_TDX_MODULE_UPDATE
+	bool "Intel TDX module runtime update"
+	depends on TDX_HOST_SERVICES
+	help
+	  This enables the kernel to support TDX module runtime update. This
+	  allows the admin to update the TDX module to another compatible
+	  version without the need to terminate running TDX guests.
+
+	  If unsure, say N.
