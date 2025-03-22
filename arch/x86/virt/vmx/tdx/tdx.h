@@ -3,6 +3,7 @@
 #define _X86_VIRT_TDX_H
 
 #include <linux/bits.h>
+#include <asm/tdx_global_metadata.h>
 
 /*
  * This file contains both macros and data structures defined by the TDX
@@ -124,5 +125,6 @@ int tdx_module_shutdown(void);
 void tdx_module_set_error(void);
 int tdx_cpu_enable(void);
 int tdx_module_run_update(void);
+int tdx_module_post_update(struct tdx_sys_info *info);
 
 #endif
