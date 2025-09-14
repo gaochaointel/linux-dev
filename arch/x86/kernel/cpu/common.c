@@ -1985,7 +1985,7 @@ void cpu_enable_virtualization(void)
 	rdmsrq(MSR_IA32_VMX_BASIC, basic_msr);
 	this_cpu_ptr(&vmxon_vmcs)->hdr.revision_id = vmx_basic_vmcs_revision_id(basic_msr);
 
-	intel_pt_handle_vmx(1);
+	intel_pt_set_vmx(1);
 
 	cr4_set_bits(X86_CR4_VMXE);
 
@@ -1999,7 +1999,7 @@ void cpu_enable_virtualization(void)
 fault:
 	pr_err("VMXON faulted on CPU%d\n", cpu);
 	cr4_clear_bits(X86_CR4_VMXE);
-	intel_pt_handle_vmx(0);
+	intel_pt_set_vmx(0);
 }
 
 /*
@@ -2031,7 +2031,7 @@ void cpu_disable_virtualization(void)
 
 exit:
 	cr4_clear_bits(X86_CR4_VMXE);
-	intel_pt_handle_vmx(0);
+	intel_pt_set_vmx(0);
 	return;
 
 fault:
