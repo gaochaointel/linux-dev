@@ -1972,6 +1972,25 @@ static int pg_level_to_tdx_sept_level(enum pg_level level)
 	return level - 1;
 }
 
+static u64 __seamcall_ir(sc_func_t sc_func, u64 fn,
+			 struct tdx_module_args *args)
+{
+	struct tdx_module_args _args;
+	u64 r;
+
+	do {
+		_args = *args;
+		r = sc_retry(sc_func, fn, &_args);
+	} while (r == TDX_INTERRUPTED_RESUMABLE);
+
+	*args = _args;
+
+	return r;
+}
+
+#define seamcall_ret_ir(fn, args)	\
+	__seamcall_ir(__seamcall_ret, fn, args)
+
 noinstr u64 tdh_vp_enter(struct tdx_vp *td, struct tdx_module_args *args)
 {
 	args->rcx = td->tdvpr_pa;
@@ -2727,9 +2746,7 @@ u64 tdh_spdm_connect(u64 spdm_id, struct page *spdm_conf,
 	};
 	u64 ret;
 
-	do {
-		ret = seamcall_ret(TDH_SPDM_CONNECT, &args);
-	} while (ret == TDX_INTERRUPTED_RESUMABLE);
+	ret = seamcall_ret_ir(TDH_SPDM_CONNECT, &args);
 
 	*spdm_req_or_out_len = args.rcx;
 
@@ -2747,9 +2764,7 @@ u64 tdh_spdm_disconnect(u64 spdm_id, struct page *spdm_rsp,
 	};
 	u64 ret;
 
-	do {
-		ret = seamcall_ret(TDH_SPDM_DISCONNECT, &args);
-	} while (ret == TDX_INTERRUPTED_RESUMABLE);
+	ret = seamcall_ret_ir(TDH_SPDM_DISCONNECT, &args);
 
 	*spdm_req_len = args.rcx;
 
@@ -2772,9 +2787,7 @@ u64 tdh_spdm_mng(u64 spdm_id, u64 spdm_op, struct page *spdm_param,
 	};
 	u64 ret;
 
-	do {
-		ret = seamcall_ret(TDH_SPDM_MNG, &args);
-	} while (ret == TDX_INTERRUPTED_RESUMABLE);
+	ret = seamcall_ret_ir(TDH_SPDM_MNG, &args);
 
 	*spdm_req_or_out_len = args.rcx;
 
@@ -2843,9 +2856,7 @@ u64 tdh_ide_stream_km(u64 spdm_id, u64 stream_id, u64 operation,
 	};
 	u64 ret;
 
-	do {
-		ret = seamcall_ret(TDH_IDE_STREAM_KM, &args);
-	} while (ret == TDX_INTERRUPTED_RESUMABLE);
+	ret = seamcall_ret_ir(TDH_IDE_STREAM_KM, &args);
 
 	*spdm_req_len = args.rcx;
 
