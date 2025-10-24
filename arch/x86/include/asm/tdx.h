@@ -26,15 +26,19 @@
 #define TDX_SEAMCALL_GP			(TDX_SW_ERROR | X86_TRAP_GP)
 #define TDX_SEAMCALL_UD			(TDX_SW_ERROR | X86_TRAP_UD)
 
+#define TDX_SEAMCALL_STATUS_MASK		0xFFFFFFFF00000000ULL
+
 /*
  * TDX module SEAMCALL leaf function error codes
  */
-#define TDX_SUCCESS		0ULL
-#define TDX_RND_NO_ENTROPY	0x8000020300000000ULL
+#define TDX_SUCCESS			0ULL
+#define TDX_RND_NO_ENTROPY		0x8000020300000000ULL
+#define TDX_UPDATE_COMPAT_SENSITIVE	0x8000051200000000ULL
 
 /* Bit definitions of TDX_FEATURES0 metadata field */
 #define TDX_FEATURES0_TD_PRESERVING	BIT(1)
 #define TDX_FEATURES0_NO_RBP_MOD	BIT(18)
+#define TDX_FEATURES0_UPDATE_COMPAT	BIT_ULL(47)
 #ifndef __ASSEMBLER__
 
 #include <uapi/asm/mce.h>
@@ -109,6 +113,11 @@ const struct tdx_sys_info *tdx_get_sysinfo(void);
 static inline bool tdx_supports_runtime_update(const struct tdx_sys_info *sysinfo)
 {
 	return sysinfo->features.tdx_features0 & TDX_FEATURES0_TD_PRESERVING;
+}
+
+static inline bool tdx_supports_update_compatibility(const struct tdx_sys_info *sysinfo)
+{
+	return sysinfo->features.tdx_features0 & TDX_FEATURES0_UPDATE_COMPAT;
 }
 
 int tdx_guest_keyid_alloc(void);
