@@ -29,3 +29,48 @@ Description:	(RO) Report the number of remaining updates that can be performed.
 		4.2 "SEAMLDR.INSTALL" for more information. The documentation is
 		available at:
 		https://cdrdv2-public.intel.com/739045/intel-tdx-seamldr-interface-specification.pdf
+
+What:		/sys/devices/faux/tdx_host/firmware/seamldr_upload
+Contact:	linux-coco@lists.linux.dev
+Description:	(Directory) The seamldr_upload directory implements the
+		fw_upload sysfs ABI, see
+		Documentation/ABI/testing/sysfs-class-firmware for the general
+		description of the attributes @data, @cancel, @error, @loading,
+		@remaining_size, and @status. This ABI facilitates "Compatible
+		TDX Module Updates". A compatible update is one that meets the
+		following criteria:
+
+		   Does not interrupt or interfere with any current TDX
+		   operation or TD VM.
+
+		   Does not invalidate any previously consumed Module metadata
+		   values outside of the TEE_TCB_SVN_2 field (updated Security
+		   Version Number) in TD Quotes.
+
+		   Does not require validation of new Module metadata fields. By
+		   implication, new Module features and capabilities are only
+		   available by installing the Module at reboot (BIOS or EFI
+		   helper loaded).
+
+		See tdx_host/compat_capable and
+		tdx_host/firmware/seamldr_upload/error. For details.
+
+What:		/sys/devices/faux/tdx_host/compat_capable
+Contact:	linux-coco@lists.linux.dev
+Description:	(RO) When present this attribute returns "1" to indicate that
+		the current seamldr, kernel, and TDX Module combination can
+		detect when an update conforms with the "Compatible TDX Module
+		Updates" criteria in the tdx_host/firmware/seamldr_upload description.
+		When this attribute is missing it is indeterminate whether an
+		update will violate the criteria.
+
+What:		/sys/devices/faux/tdx_host/firmware/seamldr_upload/error
+Contact:	linux-coco@lists.linux.dev
+Description:	(RO) See Documentation/ABI/testing/sysfs-class-firmware for
+		baseline expectations for this file. Updates that fail
+		compatibility checks end with the "device-busy" error in the
+		<STATUS>:<ERROR> format of this attribute. When this is
+		signalled current TDs and the current TDX Module stay running.
+		Other failures may result in all TDs being lost and further
+		TDX operations becoming impossible. This occurs when
+		/sys/devices/faux/tdx_host/version becomes unreadable.

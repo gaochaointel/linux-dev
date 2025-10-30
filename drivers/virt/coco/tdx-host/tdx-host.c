@@ -45,8 +45,21 @@ static ssize_t version_show(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RO(version);
 
+static ssize_t compat_capable_show(struct device *dev, struct device_attribute *attr,
+				   char *buf)
+{
+	const struct tdx_sys_info *tdx_sysinfo = tdx_get_sysinfo();
+
+	if (!tdx_sysinfo)
+		return -ENXIO;
+
+	return sysfs_emit(buf, "%i\n", tdx_supports_update_compatibility(tdx_sysinfo));
+}
+static DEVICE_ATTR_RO(compat_capable);
+
 static struct attribute *tdx_host_attrs[] = {
 	&dev_attr_version.attr,
+	&dev_attr_compat_capable.attr,
 	NULL,
 };
 
