@@ -352,6 +352,13 @@ static __init int read_sys_metadata_field(u64 field_id, u64 *data)
 
 #include "tdx_global_metadata.c"
 
+static __init void print_module_version(struct tdx_sys_info_version *version)
+{
+	pr_info("TDX-Module version: %u.%u.%02u\n",
+		version->major_version, version->minor_version,
+		version->update_version);
+}
+
 static __init int check_features(struct tdx_sys_info *sysinfo)
 {
 	u64 tdx_features0 = sysinfo->features.tdx_features0;
@@ -1157,6 +1164,8 @@ static __init int init_tdx_module(void)
 	ret = get_tdx_sys_info(&tdx_sysinfo);
 	if (ret)
 		return ret;
+
+	print_module_version(&tdx_sysinfo.version);
 
 	/* Check whether the kernel can support this module */
 	ret = check_features(&tdx_sysinfo);
