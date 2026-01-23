@@ -29,6 +29,8 @@
 /* P-SEAMLDR can accept up to 496 4KB pages for TDX module binary */
 #define SEAMLDR_MAX_NR_MODULE_4KB_PAGES	496
 
+#define SEAMLDR_MAX_NR_SIG_4KB_PAGES	4
+
 /* scenario field in struct seamldr_params */
 #define SEAMLDR_SCENARIO_UPDATE		1
 
@@ -40,8 +42,8 @@
 struct seamldr_params {
 	u32	version;
 	u32	scenario;
-	u64	sigstruct_pa;
-	u8	reserved[104];
+	u64	sigstruct_pa[SEAMLDR_MAX_NR_SIG_4KB_PAGES];
+	u8	reserved[80];
 	u64	num_module_pages;
 	u64	mod_pages_pa_list[SEAMLDR_MAX_NR_MODULE_4KB_PAGES];
 } __packed;
@@ -121,7 +123,10 @@ static struct seamldr_params *alloc_seamldr_params(const void *module, unsigned 
 	if (module_size > SEAMLDR_MAX_NR_MODULE_4KB_PAGES * SZ_4K)
 		return ERR_PTR(-EINVAL);
 
-	if (!IS_ALIGNED(module_size, SZ_4K) || sig_size != SZ_4K ||
+	if (sig_size > SEAMLDR_MAX_NR_SIG_4KB_PAGES * SZ_4K)
+		return ERR_PTR(-EINVAL);
+
+	if (!IS_ALIGNED(module_size, SZ_4K) || !IS_ALIGNED(sig_size, SZ_4K) ||
 	    !IS_ALIGNED((unsigned long)module, SZ_4K) ||
 	    !IS_ALIGNED((unsigned long)sig, SZ_4K))
 		return ERR_PTR(-EINVAL);
@@ -132,12 +137,17 @@ static struct seamldr_params *alloc_seamldr_params(const void *module, unsigned 
 
 	params->scenario = SEAMLDR_SCENARIO_UPDATE;
 
-	/*
-	 * Don't assume @sig is page-aligned although it is 4KB-aligned.
-	 * Always add the in-page offset to get the physical address.
-	 */
-	params->sigstruct_pa = (vmalloc_to_pfn(sig) << PAGE_SHIFT) +
-			       ((unsigned long)sig & ~PAGE_MASK);
+	ptr = sig;
+	for (i = 0; i < sig_size / SZ_4K; i++) {
+		/*
+		 * Don't assume @sig is page-aligned although it is 4KB-aligned.
+		 * Always add the in-page offset to get the physical address.
+		 */
+		params->sigstruct_pa[i] = (vmalloc_to_pfn(ptr) << PAGE_SHIFT) +
+					  ((unsigned long)ptr & ~PAGE_MASK);
+		ptr += SZ_4K;
+	}
+
 	params->num_module_pages = module_size / SZ_4K;
 
 	ptr = module;
