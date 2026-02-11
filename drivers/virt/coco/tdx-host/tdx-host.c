@@ -99,14 +99,6 @@ static bool supports_runtime_update(void)
 	if (!tdx_supports_runtime_update(sysinfo))
 		return false;
 
-	/*
-	 * Calling P-SEAMLDR on CPUs with the seamret_invd_vmcs bug clears
-	 * the current VMCS, which breaks KVM. Verify the erratum is not
-	 * present before exposing P-SEAMLDR features.
-	 */
-	if (boot_cpu_has_bug(X86_BUG_SEAMRET_INVD_VMCS))
-		return false;
-
 	return true;
 }
 
