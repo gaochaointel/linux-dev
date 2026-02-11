@@ -174,14 +174,6 @@ static int seamldr_init(struct device *dev)
 	if (!tdx_supports_runtime_update(tdx_sysinfo))
 		return 0;
 
-	/*
-	 * Calling P-SEAMLDR on CPUs with the seamret_invd_vmcs bug clears
-	 * the current VMCS, which breaks KVM. Verify the erratum is not
-	 * present before exposing P-SEAMLDR features.
-	 */
-	if (boot_cpu_has_bug(X86_BUG_SEAMRET_INVD_VMCS))
-		return 0;
-
 	tdx_fwl = firmware_upload_register(THIS_MODULE, dev, "tdx_module",
 					   &tdx_fw_ops, NULL);
 	if (IS_ERR(tdx_fwl))

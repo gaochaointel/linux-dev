@@ -13,6 +13,7 @@
 #include <linux/stop_machine.h>
 
 #include <asm/seamldr.h>
+#include <asm/special_insns.h>
 
 #include "seamcall_internal.h"
 #include "tdx.h"
@@ -57,8 +58,21 @@ static DEFINE_RAW_SPINLOCK(seamldr_lock);
 
 static int seamldr_call(u64 fn, struct tdx_module_args *args)
 {
+	u64 current_vmcs = -1ULL;
+	int ret;
+
 	guard(raw_spinlock)(&seamldr_lock);
-	return seamcall_prerr(fn, args);
+
+	/*
+	 * P-SEAMLDR calls clobber the current VMCS. Save and restore it.
+	 * -1 indicates invalid VMCS and no restoration is needed.
+	 */
+	WARN_ON_ONCE(vmptrst(&current_vmcs));
+	ret = seamcall_prerr(fn, args);
+	if (current_vmcs != -1ULL)
+		WARN_ON_ONCE(vmptrld(current_vmcs));
+
+	return ret;
 }
 
 int seamldr_get_info(struct seamldr_info *seamldr_info)
