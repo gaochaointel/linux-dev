@@ -303,6 +303,28 @@ static __always_inline void tile_release(void)
 	asm volatile(".byte 0xc4, 0xe2, 0x78, 0x49, 0xc0");
 }
 
+static inline int vmptrst(u64 *vmcs_pa)
+{
+	asm goto("1: vmptrst %0\n\t"
+		 _ASM_EXTABLE(1b, %l[error])
+		 : "=m" (*vmcs_pa) : : "cc" : error);
+
+	return 0;
+error:
+	return -EIO;
+}
+
+static inline int vmptrld(u64 vmcs_pa)
+{
+	asm goto("1: vmptrld %0\n\t"
+		 "jna %l[error]\n\t"
+		 _ASM_EXTABLE(1b, %l[error])
+		 : : "m" (vmcs_pa) : "cc" : error);
+	return 0;
+error:
+	return -EIO;
+}
+
 #endif /* __KERNEL__ */
 
 #endif /* _ASM_X86_SPECIAL_INSNS_H */
