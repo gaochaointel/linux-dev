@@ -321,8 +321,15 @@ DEFINE_FREE(free_seamldr_params, struct seamldr_params *,
  */
 int seamldr_install_module(const u8 *data, u32 size)
 {
+	struct tdx_sys_info_version old_version;
+	const struct tdx_sys_info *tdx_sysinfo;
 	int ret;
 
+	tdx_sysinfo = tdx_get_sysinfo();
+	if (!tdx_sysinfo)
+		return -EIO;
+
+	old_version = tdx_sysinfo->version;
 	/*
 	 * Preallocating a tdx_sys_info buffer before an update is to avoid
 	 * having to handle -ENOMEM when updating tdx_sysinfo after a
@@ -350,6 +357,6 @@ int seamldr_install_module(const u8 *data, u32 size)
 	if (ret)
 		return ret;
 
-	return tdx_module_post_update(sysinfo);
+	return tdx_module_post_update(sysinfo, &old_version);
 }
 EXPORT_SYMBOL_FOR_MODULES(seamldr_install_module, "tdx-host");

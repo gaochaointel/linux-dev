@@ -1244,29 +1244,6 @@ int tdx_module_run_update(void)
 		return ret;
 	}
 
-	tdx_module_status = TDX_MODULE_INITIALIZED;
-	return 0;
-}
-
-int tdx_module_post_update(struct tdx_sys_info *info)
-{
-	struct tdx_sys_info_version *old, *new;
-	int ret;
-
-	/* Shouldn't fail as the update has succeeded. */
-	ret = get_tdx_sys_info(info);
-	if (WARN_ONCE(ret, "version retrieval failed after update, replace the TDX module\n"))
-		return ret;
-
-	old = &tdx_sysinfo.version;
-	new = &info->version;
-	pr_info("version %u.%u.%02u -> %u.%u.%02u\n", old->major_version,
-						      old->minor_version,
-						      old->update_version,
-						      new->major_version,
-						      new->minor_version,
-						      new->update_version);
-
 	/*
 	 * Blindly refreshing the entire tdx_sysinfo could disrupt running
 	 * software, as it may subtly rely on the previous state unless
@@ -1276,8 +1253,30 @@ int tdx_module_post_update(struct tdx_sys_info *info)
 	 * that does not affect functionality, and ignore all other
 	 * changes.
 	 */
-	tdx_sysinfo.version	= info->version;
-	tdx_sysinfo.handoff	= info->handoff;
+	get_tdx_sys_info_handoff(&tdx_sysinfo.handoff);
+	get_tdx_sys_info_version(&tdx_sysinfo.version);
+
+	tdx_module_status = TDX_MODULE_INITIALIZED;
+	return 0;
+}
+
+int tdx_module_post_update(struct tdx_sys_info *info, struct tdx_sys_info_version *old)
+{
+	struct tdx_sys_info_version *new;
+	int ret;
+
+	/* Shouldn't fail as the update has succeeded. */
+	ret = get_tdx_sys_info(info);
+	if (WARN_ONCE(ret, "version retrieval failed after update, replace the TDX module\n"))
+		return ret;
+
+	new = &info->version;
+	pr_info("version %u.%u.%02u -> %u.%u.%02u\n", old->major_version,
+						      old->minor_version,
+						      old->update_version,
+						      new->major_version,
+						      new->minor_version,
+						      new->update_version);
 
 	if (!memcmp(&tdx_sysinfo, info, sizeof(*info)))
 		return 0;

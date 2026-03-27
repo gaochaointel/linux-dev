@@ -121,6 +121,6 @@ struct tdmr_info_list {
 
 int tdx_module_shutdown(void);
 int tdx_module_run_update(void);
-int tdx_module_post_update(struct tdx_sys_info *info);
+int tdx_module_post_update(struct tdx_sys_info *info, struct tdx_sys_info_version *old);
 
 #endif
