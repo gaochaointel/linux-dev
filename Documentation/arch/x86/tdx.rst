@@ -73,6 +73,119 @@ initialize::
 
   [..] virt/tdx: TDX-Module initialization failed ...
 
+TDX module Runtime Update
+-------------------------
+
+The TDX architecture includes a persistent SEAM loader (P-SEAMLDR) that
+runs in SEAM mode separately from the TDX module. The kernel can
+communicate with the P-SEAMLDR to perform TDX module runtime updates.
+
+How to update the TDX module
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+1. Check whether runtime update is supported
+
+   Verify that the TDX module firmware upload interface is available::
+
+     /sys/class/firmware/tdx_module
+
+   If the system supports TDX but not runtime update, the CPU may be
+   affected by the seamret_invd_vmcs erratum::
+
+     cat /proc/cpuinfo | grep seamret_invd_vmcs
+
+   In that case, a microcode update or newer hardware may be required.
+
+2. Choose a compatible TDX module image
+
+   Choosing a compatible TDX module image is not trivial. There are both
+   hard compatibility requirements and policy choices to make.
+
+   Hard compatibility requirements:
+
+   - The update must be compatible with the CPU.
+
+     The set of supported CPU FMS values (family, model, stepping) is
+     encoded in the module image itself. In practice, module version series
+     are platform-specific. For example, the 1.5.x series runs on Sapphire
+     Rapids but not Granite Rapids, which needs 2.0.x.
+
+   - The update must be compatible with the P-SEAMLDR.
+
+     This information is provided in a metadata file, typically
+     mapping_file.json, released with the module image. Each module image
+     specifies the minimum required P-SEAMLDR version, and the update is
+     compatible only if the running P-SEAMLDR meets that requirement.
+
+   - The update must be compatible with the running TDX module.
+
+     Like P-SEAMLDR, each module image also specifies a minimum required
+     TDX module version. The running module must satisfy that requirement.
+
+   Policy choices:
+
+   - Whether to optimize for fewer updates or for smaller version steps,
+     for example, 1.2.3 => 1.2.5 versus 1.2.3 => 1.2.4 => 1.2.5.
+
+   This selection logic is too complex to live in the kernel and is left
+   to userspace. One existing userspace implementation is the script in
+   the Intel TDX Module Binaries repository:
+
+   https://github.com/intel/confidential-computing.tdx.tdx-module.binaries/blob/main/version_select_and_load.py
+
+   To help userspace make that decision, the kernel exposes these sysfs
+   files:
+
+   - /sys/devices/faux/tdx_host/version
+   - /sys/devices/faux/tdx_host/seamldr_version
+   - /sys/devices/faux/tdx_host/num_remaining_updates
+
+   See Documentation/ABI/testing/sysfs-devices-faux-tdx-host for details.
+
+3. Perform the update
+
+   Run::
+
+     echo 1 > /sys/class/firmware/tdx_module/loading
+     cat <path_to_module_image> > /sys/class/firmware/tdx_module/data
+     echo 0 > /sys/class/firmware/tdx_module/loading
+
+   The files /sys/class/firmware/tdx_module/status and
+   /sys/class/firmware/tdx_module/error report update progress and error
+   information.
+
+   After the update completes, the new module version is visible in
+   /sys/devices/faux/tdx_host/version.
+
+Implementation details
+~~~~~~~~~~~~~~~~~~~~~~
+
+1. Updates use fw_upload instead of request_firmware().
+
+   The kernel does not select the update image because compatibility
+   checks are too complex to implement in-kernel, and image selection
+   also involves operator policy choices. fw_upload allows userspace
+   to provide the selected image directly, whereas request_firmware()
+   would require the kernel to choose it.
+
+2. Updates run under stop_machine().
+
+   During an update, the TDX module becomes unavailable for other TDX
+   operations. Running the update under stop_machine() prevents other
+   kernel components that use TDX, such as KVM, from issuing TDX
+   operations and encountering unexpected failures while the update is in
+   progress.
+
+Impact on running TDs
+~~~~~~~~~~~~~~~~~~~~~
+
+TDX module runtime updates have almost no visible impact on running TDs.
+
+The main exception is the TEE_TCB_SVN_2 field in TD quotes, which
+reflects the TCB of the currently running TDX module and therefore
+changes after an update. By contrast, TEE_TCB_SVN reflects the TCB at TD
+launch time and is not affected.
+
 TDX Interaction to Other Kernel Components
 ------------------------------------------
 
