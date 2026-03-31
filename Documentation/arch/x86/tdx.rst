@@ -73,6 +73,46 @@ initialize::
 
   [..] virt/tdx: TDX-Module initialization failed ...
 
+TDX module Runtime Update
+-------------------------
+
+The TDX architecture includes a persistent SEAM loader (P-SEAMLDR) that
+runs in SEAM mode separately from the TDX module. The kernel can
+communicate with P-SEAMLDR to perform runtime updates of the TDX module.
+
+During updates, the TDX module becomes unresponsive to other TDX
+operations. To prevent components using TDX (such as KVM) from
+experiencing unexpected errors during updates, updates are performed in
+stop_machine() context.
+
+Selecting a TDX module update image among all available images is not a
+simple "load the latest" decision. The chosen image must be compatible
+with both the platform and the currently running module.
+
+Some constraints are hard requirements:
+
+- Module version series are platform-specific. For example, the 1.5.x
+  series runs on Sapphire Rapids but not Granite Rapids, which needs
+  2.0.x.
+
+- Updates are also constrained by version distance. A 1.5.6 module
+  might permit updates to 1.5.7 but not to 1.5.50.
+
+There may also be userspace policy choices:
+
+- Decide the update direction: upgrade or downgrade
+
+- Choose whether to optimize for fewer updates or smaller version
+  steps, for example, 1.2.3=>1.2.5 versus 1.2.3=>1.2.4=>1.2.5.
+
+Given the complexity of validating those requirements, and to preserve
+flexibility in userspace, the kernel leaves module selection to userspace
+and uses fw_upload to accept a module update image stream from userspace.
+One existing userspace implementation of the module selection logic is
+the script in the Intel TDX Module Binaries repository, available at
+
+https://github.com/intel/confidential-computing.tdx.tdx-module.binaries/blob/main/version_select_and_load.py
+
 TDX Interaction to Other Kernel Components
 ------------------------------------------
 
