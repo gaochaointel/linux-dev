@@ -393,6 +393,22 @@ static int read_sys_metadata_table(const struct tdx_sys_field *fields,
 	return 0;
 }
 
+#define MAP_VERSION(_field_id, _member)	\
+	TD_SYSINFO_MAP(_field_id, tdx_sys_info_version, _member)
+
+static const struct tdx_sys_field version_fields[] = {
+	MAP_VERSION(MINOR_VERSION,	minor_version),
+	MAP_VERSION(MAJOR_VERSION,	major_version),
+	MAP_VERSION(UPDATE_VERSION,	update_version),
+};
+
+static int get_tdx_sys_info_version(struct tdx_sys_info_version *sysinfo_version)
+{
+	return read_sys_metadata_table(version_fields,
+				       ARRAY_SIZE(version_fields),
+				       sysinfo_version);
+}
+
 #define MAP_FEATURES(_field_id, _member)	\
 	TD_SYSINFO_MAP(_field_id, tdx_sys_info_features, _member)
 
@@ -405,6 +421,54 @@ static __init int get_tdx_sys_info_features(struct tdx_sys_info_features *sysinf
 	return read_sys_metadata_table(features_fields,
 				       ARRAY_SIZE(features_fields),
 				       sysinfo_features);
+}
+
+#define MAP_TDMR(_field_id, _member)	\
+	TD_SYSINFO_MAP(_field_id, tdx_sys_info_tdmr, _member)
+
+static const struct tdx_sys_field tdmr_fields[] __initconst = {
+	MAP_TDMR(MAX_TDMRS,		max_tdmrs),
+	MAP_TDMR(MAX_RESERVED_PER_TDMR,	max_reserved_per_tdmr),
+	MAP_TDMR(PAMT_4K_ENTRY_SIZE,	pamt_4k_entry_size),
+	MAP_TDMR(PAMT_2M_ENTRY_SIZE,	pamt_2m_entry_size),
+	MAP_TDMR(PAMT_1G_ENTRY_SIZE,	pamt_1g_entry_size),
+};
+
+static __init int get_tdx_sys_info_tdmr(struct tdx_sys_info_tdmr *sysinfo_tdmr)
+{
+	return read_sys_metadata_table(tdmr_fields,
+				       ARRAY_SIZE(tdmr_fields),
+				       sysinfo_tdmr);
+}
+
+#define MAP_TD_CTRL(_field_id, _member)	\
+	TD_SYSINFO_MAP(_field_id, tdx_sys_info_td_ctrl, _member)
+
+static const struct tdx_sys_field td_ctrl_fields[] __initconst = {
+	MAP_TD_CTRL(TDR_BASE_SIZE,	tdr_base_size),
+	MAP_TD_CTRL(TDCS_BASE_SIZE,	tdcs_base_size),
+	MAP_TD_CTRL(TDVPS_BASE_SIZE,	tdvps_base_size),
+};
+
+static __init int get_tdx_sys_info_td_ctrl(struct tdx_sys_info_td_ctrl *sysinfo_td_ctrl)
+{
+	return read_sys_metadata_table(td_ctrl_fields,
+				       ARRAY_SIZE(td_ctrl_fields),
+				       sysinfo_td_ctrl);
+}
+
+#define MAP_HANDOFF(_field_id, _member)	\
+	TD_SYSINFO_MAP(_field_id, tdx_sys_info_handoff, _member)
+
+static const struct tdx_sys_field handoff_fields[] = {
+	MAP_HANDOFF(MODULE_HV,	module_hv),
+};
+
+static int get_tdx_sys_info_handoff(struct tdx_sys_info_handoff *sysinfo_handoff)
+{
+	return read_sys_metadata_table(handoff_fields,
+				       ARRAY_SIZE(handoff_fields),
+				       sysinfo_handoff);
 }
 
 #include "tdx_global_metadata.c"
