@@ -471,6 +471,62 @@ static int get_tdx_sys_info_handoff(struct tdx_sys_info_handoff *sysinfo_handoff
 				       sysinfo_handoff);
 }
 
+#define MAP_TD_CONF(_field_id, _member)	\
+	TD_SYSINFO_MAP(_field_id, tdx_sys_info_td_conf, _member)
+
+/*
+ * Scalar fields of the "TD Configuration" class.  num_cpuid_config
+ * must be present here (and must be read before the CPUID arrays
+ * below) because it sizes them.
+ */
+static const struct tdx_sys_field td_conf_fields[] __initconst = {
+	MAP_TD_CONF(ATTRIBUTES_FIXED0,	attributes_fixed0),
+	MAP_TD_CONF(ATTRIBUTES_FIXED1,	attributes_fixed1),
+	MAP_TD_CONF(XFAM_FIXED0,	xfam_fixed0),
+	MAP_TD_CONF(XFAM_FIXED1,	xfam_fixed1),
+	MAP_TD_CONF(NUM_CPUID_CONFIG,	num_cpuid_config),
+	MAP_TD_CONF(MAX_VCPUS_PER_TD,	max_vcpus_per_td),
+};
+
+static __init int get_tdx_sys_info_td_conf(struct tdx_sys_info_td_conf *td_conf)
+{
+	int ret, i, j;
+
+	ret = read_sys_metadata_table(td_conf_fields,
+				      ARRAY_SIZE(td_conf_fields),
+				      td_conf);
+	if (ret)
+		return ret;
+
+	/*
+	 * The configurable-CPUID arrays are sized at runtime by
+	 * num_cpuid_config, so they can't be expressed in a static
+	 * TD_SYSINFO_MAP table.  Their field IDs are contiguous from
+	 * the bases announced by the spec.
+	 */
+	if (td_conf->num_cpuid_config > ARRAY_SIZE(td_conf->cpuid_config_leaves) ||
+	    td_conf->num_cpuid_config > ARRAY_SIZE(td_conf->cpuid_config_values))
+		return -EINVAL;
+
+	for (i = 0; i < td_conf->num_cpuid_config; i++) {
+		ret = read_sys_metadata_field(MD_FIELD_ID_CPUID_CONFIG_LEAVES + i,
+					      &td_conf->cpuid_config_leaves[i]);
+		if (ret)
+			return ret;
+
+		for (j = 0; j < 2; j++) {
+			u64 fid = MD_FIELD_ID_CPUID_CONFIG_VALUES + i * 2 + j;
+
+			ret = read_sys_metadata_field(fid,
+						      &td_conf->cpuid_config_values[i][j]);
+			if (ret)
+				return ret;
+		}
+	}
+
+	return 0;
+}
+
 #include "tdx_global_metadata.c"
 
 static __init int check_features(struct tdx_sys_info *sysinfo)
