@@ -1,9 +1,14 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* Automatically generated TDX global metadata structures. */
-#ifndef _X86_VIRT_TDX_AUTO_GENERATED_TDX_GLOBAL_METADATA_H
-#define _X86_VIRT_TDX_AUTO_GENERATED_TDX_GLOBAL_METADATA_H
+#ifndef _ASM_X86_TDX_GLOBAL_METADATA_H
+#define _ASM_X86_TDX_GLOBAL_METADATA_H
 
 #include <linux/types.h>
+
+/*
+ * TDX module "Global Scope Metadata" as documented in the Intel TDX
+ * Module ABI spec. Each sub-structure below corresponds to one TDX
+ * metadata "Class"; its members are populated via TDH.SYS.RD SEAMCALLs.
+ */
 
 struct tdx_sys_info_version {
 	u16 minor_version;
@@ -52,4 +57,4 @@ struct tdx_sys_info {
 	struct tdx_sys_info_td_conf td_conf;
 };
 
-#endif
+#endif /* _ASM_X86_TDX_GLOBAL_METADATA_H */
