@@ -347,6 +347,66 @@ static int read_sys_metadata_field(u64 field_id, u64 *data)
 	return 0;
 }
 
+/*
+ * Mapping between a TDX global metadata field and the C member that
+ * holds its value. Use TD_SYSINFO_MAP() to populate entries.
+ */
+struct tdx_sys_field {
+	u64 field_id;
+	u16 offset;
+	u8  size;
+};
+
+#define TD_SYSINFO_MAP(_field_id, _struct, _member)				\
+	{									\
+		.field_id = MD_FIELD_ID_##_field_id,				\
+		.offset   = offsetof(struct _struct, _member),			\
+		.size     = sizeof_field(struct _struct, _member),		\
+	}
+
+/*
+ * Walk a table of TDX global metadata fields, read each via TDH.SYS.RD,
+ * and store the result into the matching C member of *@base.
+ */
+static int read_sys_metadata_table(const struct tdx_sys_field *fields,
+				   int nr_fields, void *base)
+{
+	int i, ret;
+	u64 val;
+
+	for (i = 0; i < nr_fields; i++) {
+		const struct tdx_sys_field *f = &fields[i];
+
+		ret = read_sys_metadata_field(f->field_id, &val);
+		if (ret)
+			return ret;
+
+		switch (f->size) {
+		case 1: *(u8  *)(base + f->offset) = val; break;
+		case 2: *(u16 *)(base + f->offset) = val; break;
+		case 4: *(u32 *)(base + f->offset) = val; break;
+		case 8: *(u64 *)(base + f->offset) = val; break;
+		default:
+			return -EINVAL;
+		}
+	}
+	return 0;
+}
+
+#define MAP_FEATURES(_field_id, _member)	\
+	TD_SYSINFO_MAP(_field_id, tdx_sys_info_features, _member)
+
+static const struct tdx_sys_field features_fields[] __initconst = {
+	MAP_FEATURES(TDX_FEATURES0,	tdx_features0),
+};
+
+static __init int get_tdx_sys_info_features(struct tdx_sys_info_features *sysinfo_features)
+{
+	return read_sys_metadata_table(features_fields,
+				       ARRAY_SIZE(features_fields),
+				       sysinfo_features);
+}
+
 #include "tdx_global_metadata.c"
 
 static __init int check_features(struct tdx_sys_info *sysinfo)
