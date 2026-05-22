@@ -25,16 +25,24 @@ static ssize_t version_show(struct device *dev, struct device_attribute *attr,
 			    char *buf)
 {
 	const struct tdx_sys_info *tdx_sysinfo = tdx_get_sysinfo();
-	const struct tdx_sys_info_version *ver;
+	struct tdx_sys_info_version ver;
 
 	if (!tdx_sysinfo)
 		return -ENXIO;
 
-	ver = &tdx_sysinfo->version;
+	/*
+	 * TDX module version can change during updates. Updates run in
+	 * stop_machine(), which does not interrupt a preemption-disabled
+	 * region. Take a copy of the version with preemption disabled to
+	 * avoid exposing a partially updated version to userspace.
+	 */
+	preempt_disable();
+	ver = tdx_sysinfo->version;
+	preempt_enable();
 
-	return sysfs_emit(buf, TDX_VERSION_FMT "\n", ver->major_version,
-						     ver->minor_version,
-						     ver->update_version);
+	return sysfs_emit(buf, TDX_VERSION_FMT "\n", ver.major_version,
+						     ver.minor_version,
+						     ver.update_version);
 }
 static DEVICE_ATTR_RO(version);
 
