@@ -73,6 +73,137 @@ initialize::
 
   [..] virt/tdx: TDX-Module initialization failed ...
 
+TDX module Runtime Update
+-------------------------
+
+The TDX module is normally the only piece of software running in SEAM
+mode with which the kernel interacts. But there is a second piece of
+software which is used to load or update the TDX module: a persistent
+SEAM loader (P-SEAMLDR). It runs in SEAM mode separately from the TDX
+module. The kernel communicates with the P-SEAMLDR to perform TDX
+module runtime updates.
+
+How to update the TDX module
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Updating the TDX module is a complex process. Much of the logic and
+policy is left to userspace. End users should use existing update
+infrastructure provided by their distro. A reference implementation
+is in the Intel TDX Module Binaries repository:
+
+   https://github.com/intel/confidential-computing.tdx.tdx-module.binaries/blob/main/version_select_and_load.py
+
+This will now lay out roughly what is needed to implement a
+userspace-driven TDX module update. Detailed documentation on the
+tdx_host ABIs is available here::
+
+     Documentation/ABI/testing/sysfs-devices-faux-tdx-host
+
+and is not duplicated in this document.
+
+1. Check whether runtime update is supported at all
+
+   Verify that the TDX module firmware upload interface is available::
+
+     /sys/class/firmware/tdx_module
+
+   If the system supports TDX but not runtime update, the CPU may be
+   affected by the seamret_invd_vmcs erratum::
+
+     cat /proc/cpuinfo | grep seamret_invd_vmcs
+
+   In that case, a microcode update or newer hardware may be required.
+
+2. Check whether additional updates are possible
+
+   Verify that::
+
+     /sys/devices/faux/tdx_host/num_remaining_updates
+
+   has a value greater than 0. If not, the TDX update log might be full.
+   A reboot is required to reset this to a nonzero value.
+
+3. Choose a compatible TDX module image
+
+   Choosing a compatible TDX module image is not trivial. There are both
+   hard compatibility requirements and policy choices to make.
+
+   Hard compatibility requirements:
+
+   - The update must be compatible with the kernel.
+
+     The update must not change any TDX ABIs in any non-backward-compatible
+     way. It can introduce new features but must not require that the kernel
+     use new ABIs for existing features. It must ensure that the rest of the
+     system is not affected in any way. Software on the system must never
+     notice any behavioral changes. Attestation results should be identical
+     except for version changes.
+
+   - The update must be compatible with the CPU.
+
+     The set of supported CPU FMS values (family, model, stepping) is
+     encoded in the module image itself. In practice, module version series
+     are platform-specific. For example, the 1.5.x series runs on Sapphire
+     Rapids but not Granite Rapids, which needs 2.0.x.
+
+   - The update must be compatible with the P-SEAMLDR.
+
+     This information is provided in a metadata file, typically
+     mapping_file.json, released with the module image. Each module image
+     specifies the minimum required P-SEAMLDR version, and the update is
+     compatible only if the running P-SEAMLDR meets that requirement.
+
+     The current version of the P-SEAMLDR is available here::
+
+       /sys/devices/faux/tdx_host/seamldr_version
+
+   - The update must be compatible with the running TDX module.
+
+     Like P-SEAMLDR, each module image also specifies a minimum required
+     TDX module version. The running module must satisfy that requirement.
+
+     The update software can read the current TDX module version here::
+
+       /sys/devices/faux/tdx_host/version
+
+   Policy choices:
+
+   - The update software chooses how to optimize its update. For instance,
+     it can optimize for fewer updates or for smaller version steps,
+     for example, 1.2.3 => 1.2.5 versus 1.2.3 => 1.2.4 => 1.2.5.
+
+4. Perform the update
+
+   Run::
+
+     echo 1 > /sys/class/firmware/tdx_module/loading
+     cat <path_to_module_image> > /sys/class/firmware/tdx_module/data
+     echo 0 > /sys/class/firmware/tdx_module/loading
+
+   The files /sys/class/firmware/tdx_module/status and
+   /sys/class/firmware/tdx_module/error report update progress and error
+   information.
+
+   After the update completes, the new module version is visible in
+   /sys/devices/faux/tdx_host/version.
+
+Impact on running TDs
+~~~~~~~~~~~~~~~~~~~~~
+
+TDX module runtime updates must have virtually no visible impact on running
+TDs. Any TD visible impact is a TDX module bug.
+
+The main exception is the TEE_TCB_SVN_2 field in TD quotes, which
+reflects the TCB of the currently running TDX module and therefore
+changes after an update. By contrast, TEE_TCB_SVN reflects the TCB at TD
+launch time and is not affected.
+
+Interaction vs reboot
+~~~~~~~~~~~~~~~~~~~~~
+
+A module update is not persistent across a reboot. The updated module must
+be applied again after reboot if it is still needed.
+
 TDX Interaction to Other Kernel Components
 ------------------------------------------
 
