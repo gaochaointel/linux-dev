@@ -90,4 +90,5 @@
 
 /* Tertiary Processor-Based VM-Execution Controls, word 3 */
 #define VMX_FEATURE_IPI_VIRT		( 3*32+  4) /* "ipi_virt" Enable IPI virtualization */
+#define VMX_FEATURE_APIC_TIMER_VIRT	( 3*32+  8) /* "apic_timer_virt" APIC timer virtualization */
 #endif /* _ASM_X86_VMXFEATURES_H */
