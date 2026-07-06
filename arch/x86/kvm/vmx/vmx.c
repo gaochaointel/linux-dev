@@ -4587,6 +4587,9 @@ void vmx_refresh_apicv_exec_ctrl(struct kvm_vcpu *vcpu)
 	if (enable_ipiv)
 		tertiary_exec_controls_changebit(vmx, TERTIARY_EXEC_IPI_VIRT,
 						 kvm_vcpu_apicv_active(vcpu));
+	if (cpu_has_vmx_apic_timer_virt())
+		tertiary_exec_controls_changebit(vmx, TERTIARY_EXEC_APIC_TIMER_VIRT,
+						 kvm_vcpu_apicv_active(vcpu));
 
 	vmx_update_msr_bitmap_x2apic(vcpu);
 }
@@ -4645,6 +4648,9 @@ static u64 vmx_tertiary_exec_control(struct vcpu_vmx *vmx)
 	 */
 	if (!enable_ipiv || !kvm_vcpu_apicv_active(&vmx->vcpu))
 		exec_control &= ~TERTIARY_EXEC_IPI_VIRT;
+
+	if (!cpu_has_vmx_apic_timer_virt() || !kvm_vcpu_apicv_active(&vmx->vcpu))
+		exec_control &= ~TERTIARY_EXEC_APIC_TIMER_VIRT;
 
 	return exec_control;
 }
