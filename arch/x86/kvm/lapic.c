@@ -1893,6 +1893,8 @@ static void apic_update_lvtt(struct kvm_lapic *apic)
 		apic->lapic_timer.timer_mode = timer_mode;
 		limit_periodic_timer_frequency(apic);
 	}
+
+	kvm_x86_call(update_lvtt)(apic->vcpu);
 }
 
 /*
