@@ -122,6 +122,9 @@ module_param(enable_ipiv, bool, 0444);
 
 module_param(enable_device_posted_irqs, bool, 0444);
 
+static bool __read_mostly enable_apic_timer_virt = 1;
+module_param_named(apic_timer_virt, enable_apic_timer_virt, bool, 0444);
+
 /*
  * If nested=1, nested virtualization is supported, i.e., guests may use
  * VMX and be a hypervisor for its own guests. If nested=0, guests may not
@@ -4587,7 +4590,7 @@ void vmx_refresh_apicv_exec_ctrl(struct kvm_vcpu *vcpu)
 	if (enable_ipiv)
 		tertiary_exec_controls_changebit(vmx, TERTIARY_EXEC_IPI_VIRT,
 						 kvm_vcpu_apicv_active(vcpu));
-	if (cpu_has_vmx_apic_timer_virt()) {
+	if (enable_apic_timer_virt) {
 		tertiary_exec_controls_changebit(vmx, TERTIARY_EXEC_APIC_TIMER_VIRT,
 						 kvm_vcpu_apicv_active(vcpu));
 		vmx_update_lvtt(vcpu);
@@ -4651,7 +4654,7 @@ static u64 vmx_tertiary_exec_control(struct vcpu_vmx *vmx)
 	if (!enable_ipiv || !kvm_vcpu_apicv_active(&vmx->vcpu))
 		exec_control &= ~TERTIARY_EXEC_IPI_VIRT;
 
-	if (!cpu_has_vmx_apic_timer_virt() || !kvm_vcpu_apicv_active(&vmx->vcpu))
+	if (!enable_apic_timer_virt || !kvm_vcpu_apicv_active(&vmx->vcpu))
 		exec_control &= ~TERTIARY_EXEC_APIC_TIMER_VIRT;
 
 	return exec_control;
@@ -8421,7 +8424,7 @@ void vmx_update_lvtt(struct kvm_vcpu *vcpu)
 	u32 lvt = kvm_lapic_get_reg(vcpu->arch.apic, APIC_LVTT);
 	bool enable;
 
-	if (!cpu_has_vmx_apic_timer_virt())
+	if (!enable_apic_timer_virt)
 		return;
 
 	enable = kvm_vcpu_apicv_active(vcpu) &&
@@ -8767,6 +8770,9 @@ __init int vmx_hardware_setup(void)
 
 	if (!enable_apicv || !cpu_has_vmx_ipiv())
 		enable_ipiv = false;
+
+	if (!enable_apicv || !cpu_has_vmx_apic_timer_virt())
+		enable_apic_timer_virt = false;
 
 	if (cpu_has_vmx_tsc_scaling())
 		kvm_caps.has_tsc_control = true;
