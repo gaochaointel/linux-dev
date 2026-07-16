@@ -4587,9 +4587,11 @@ void vmx_refresh_apicv_exec_ctrl(struct kvm_vcpu *vcpu)
 	if (enable_ipiv)
 		tertiary_exec_controls_changebit(vmx, TERTIARY_EXEC_IPI_VIRT,
 						 kvm_vcpu_apicv_active(vcpu));
-	if (cpu_has_vmx_apic_timer_virt())
+	if (cpu_has_vmx_apic_timer_virt()) {
 		tertiary_exec_controls_changebit(vmx, TERTIARY_EXEC_APIC_TIMER_VIRT,
 						 kvm_vcpu_apicv_active(vcpu));
+		vmx_update_lvtt(vcpu);
+	}
 
 	vmx_update_msr_bitmap_x2apic(vcpu);
 }
@@ -6841,9 +6843,25 @@ unexpected_vmexit:
 	return 0;
 }
 
+static void vmx_sync_hv_timer(struct kvm_vcpu *vcpu)
+{
+	struct vcpu_vmx *vmx = to_vmx(vcpu);
+	struct kvm_timer *ktimer = &vcpu->arch.apic->lapic_timer;
+
+	if (!vmx->apic_timer_virt_enabled)
+		return;
+
+	ktimer->tscdeadline = vmcs_read64(APIC_TIMER_VIRT_DEADLINE);
+	ktimer->hv_timer_in_use = !!ktimer->tscdeadline;
+}
+
 int vmx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
 {
-	int ret = __vmx_handle_exit(vcpu, exit_fastpath);
+	int ret;
+
+	vmx_sync_hv_timer(vcpu);
+
+	ret = __vmx_handle_exit(vcpu, exit_fastpath);
 
 	/*
 	 * Exit to user space when bus lock detected to inform that there is
@@ -8330,14 +8348,31 @@ static inline int u64_shl_div_u64(u64 a, unsigned int shift,
 int vmx_set_hv_timer(struct kvm_vcpu *vcpu, u64 guest_deadline_tsc,
 		     bool *expired)
 {
-	struct vcpu_vmx *vmx;
+	struct vcpu_vmx *vmx = to_vmx(vcpu);
 	u64 tscl, guest_tscl, delta_tsc, lapic_timer_advance_cycles;
 	struct kvm_timer *ktimer = &vcpu->arch.apic->lapic_timer;
 
-	vmx = to_vmx(vcpu);
 	tscl = rdtsc();
 	guest_tscl = kvm_read_l1_tsc(vcpu, tscl);
 	delta_tsc = max(guest_deadline_tsc, guest_tscl) - guest_tscl;
+
+	if (vmx->apic_timer_virt_enabled) {
+		u64 host_deadline;
+
+		if (vcpu->arch.l1_tsc_scaling_ratio != kvm_caps.default_tsc_scaling_ratio &&
+		    delta_tsc && u64_shl_div_u64(delta_tsc,
+					kvm_caps.tsc_scaling_ratio_frac_bits,
+					vcpu->arch.l1_tsc_scaling_ratio, &delta_tsc))
+			host_deadline = -1ULL;
+		else
+			host_deadline = tscl + delta_tsc;
+
+		vmcs_write64(APIC_TIMER_VIRT_DEADLINE, guest_deadline_tsc);
+		vmcs_write64(APIC_TIMER_PHYS_DEADLINE, host_deadline);
+		*expired = false;
+		return 0;
+	}
+
 	lapic_timer_advance_cycles = nsec_to_cycles(vcpu,
 						    ktimer->timer_advance_ns);
 
@@ -8369,9 +8404,42 @@ int vmx_set_hv_timer(struct kvm_vcpu *vcpu, u64 guest_deadline_tsc,
 
 void vmx_cancel_hv_timer(struct kvm_vcpu *vcpu)
 {
-	to_vmx(vcpu)->hv_deadline_tsc = -1;
+	struct vcpu_vmx *vmx = to_vmx(vcpu);
+
+	if (vmx->apic_timer_virt_enabled) {
+		vmcs_write64(APIC_TIMER_VIRT_DEADLINE, 0);
+		vmcs_write64(APIC_TIMER_PHYS_DEADLINE, 0);
+	}
+
+	vmx->hv_deadline_tsc = -1;
 }
 #endif
+
+void vmx_update_lvtt(struct kvm_vcpu *vcpu)
+{
+	struct vcpu_vmx *vmx = to_vmx(vcpu);
+	u32 lvt = kvm_lapic_get_reg(vcpu->arch.apic, APIC_LVTT);
+	bool enable;
+
+	if (!cpu_has_vmx_apic_timer_virt())
+		return;
+
+	enable = kvm_vcpu_apicv_active(vcpu) &&
+		 (lvt & APIC_LVT_TIMER_TSCDEADLINE) &&
+		 !(lvt & APIC_LVT_MASKED);
+
+	if (enable) {
+		vmcs_write16(APIC_TIMER_VIRT_VECTOR, lvt & APIC_VECTOR_MASK);
+		vmx_set_intercept_for_msr(vcpu, MSR_IA32_TSC_DEADLINE,
+					  MSR_TYPE_RW, false);
+	} else {
+		vmx_set_intercept_for_msr(vcpu, MSR_IA32_TSC_DEADLINE,
+					  MSR_TYPE_RW, true);
+		vmcs_write64(APIC_TIMER_VIRT_DEADLINE, 0);
+		vmcs_write64(APIC_TIMER_PHYS_DEADLINE, 0);
+	}
+	vmx->apic_timer_virt_enabled = enable;
+}
 
 void vmx_update_cpu_dirty_logging(struct kvm_vcpu *vcpu)
 {

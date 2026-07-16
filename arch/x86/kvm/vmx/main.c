@@ -995,6 +995,7 @@ struct kvm_x86_ops vt_x86_ops __initdata = {
 	.set_hv_timer = vt_op(set_hv_timer),
 	.cancel_hv_timer = vt_op(cancel_hv_timer),
 #endif
+	.update_lvtt = vmx_update_lvtt,
 
 	.setup_mce = vt_op(setup_mce),
 
