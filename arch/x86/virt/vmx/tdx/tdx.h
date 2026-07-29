@@ -109,6 +109,21 @@
 #define MD_FIELD_ID_CPUID_CONFIG_LEAVES		0x9900000300000400ULL
 #define MD_FIELD_ID_CPUID_CONFIG_VALUES		0x9900000300000500ULL
 
+/*
+ * Sub-field definitions of MD_FIELD_ID.
+ *
+ * See "MD_FIELD_ID (Metadata Field Identifier / Sequence Header)
+ * Definition" in the Intel TDX Module ABI spec.
+ *
+ *  - Bit 33:32: ELEMENT_SIZE_CODE -- log2 of a single metadata
+ *                                    element's size in bytes
+ */
+#define MD_FIELD_ID_ELE_SIZE_CODE(field_id)	\
+	(((field_id) & GENMASK_ULL(33, 32)) >> 32)
+
+#define MD_FIELD_ID_ELE_SIZE(field_id)		\
+	(1 << MD_FIELD_ID_ELE_SIZE_CODE(field_id))
+
 /* TDX page types */
 #define	PT_NDA		0x0
 #define	PT_RSVD		0x1

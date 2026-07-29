@@ -357,11 +357,18 @@ struct tdx_sys_field {
 	u8  size;
 };
 
+/*
+ * The size encoded in the field ID and the size of the destination C
+ * member must agree; BUILD_BUG_ON_ZERO() enforces this at compile time.
+ */
 #define TD_SYSINFO_MAP(_field_id, _struct, _member)				\
 	{									\
 		.field_id = MD_FIELD_ID_##_field_id,				\
 		.offset   = offsetof(struct _struct, _member),			\
-		.size     = sizeof_field(struct _struct, _member),		\
+		.size     = sizeof_field(struct _struct, _member) +		\
+			    BUILD_BUG_ON_ZERO(					\
+				sizeof_field(struct _struct, _member) !=	\
+				MD_FIELD_ID_ELE_SIZE(MD_FIELD_ID_##_field_id)),	\
 	}
 
 /*
