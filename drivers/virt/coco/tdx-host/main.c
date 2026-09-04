@@ -43,11 +43,26 @@ static inline u32 tdisp_func_id(struct pci_dev *pdev)
 	return func_id;
 }
 
+#define SPDM_CAP_HBEAT		BIT(13)
+#define SPDM_CAP_KEY_UPD	BIT(14)
+
+struct spdm_config_info_t {
+	u32 vmm_spdm_cap;
+	u8 spdm_session_policy;
+	u8 certificate_slot_mask;
+	u8 raw_bitstream_requested;
+	u8 reserved[4089];
+} __packed;
+
+static_assert(sizeof(struct spdm_config_info_t) == 4096);
+
 struct tdx_tsm_link {
 	struct pci_tsm_pf0 pci;
 	u32 func_id;
 
 	u64 spdm_id;
+	struct page *in_msg;
+	struct page *out_msg;
 	unsigned int spdm_mt_nr_pages;
 	void *spdm_mt;
 };
@@ -57,9 +72,95 @@ static struct tdx_tsm_link *to_tdx_tsm_link(struct pci_tsm *tsm)
 	return container_of(tsm, struct tdx_tsm_link, pci.base_tsm);
 }
 
+static int tdx_spdm_msg_exchange(struct pci_dev *pdev,
+				 void *request, size_t request_sz,
+				 void *response, size_t response_sz)
+{
+	/* TODO: implement the PCI DOE transfer */
+	return 0;
+}
+
+/*
+ * When serving SEAMCALLs, the TDX module extensions work like service thread
+ * pools. The number of service threads is limited per service type (or
+ * "per extension" in terms of TDX). When the host issues a request via
+ * SEAMCALL but the TDX module can't find an available thread, it returns
+ * TDX_OPERAND_BUSY. Currently the thread number limit for the TDISP extension
+ * is 1. So a mutex could work to prevent SEAMCALL busy returns.
+ */
+static DEFINE_MUTEX(tdx_spdm_lock);
+
+static int tdx_spdm_xfer_handler(struct tdx_tsm_link *tlink, u64 sret,
+				 u64 out_msg_sz)
+{
+	int ret;
+
+	if (sret == TDX_SPDM_REQUEST) {
+		ret = tdx_spdm_msg_exchange(tlink->pci.base_tsm.pdev,
+					    page_address(tlink->out_msg),
+					    out_msg_sz,
+					    page_address(tlink->in_msg),
+					    PAGE_SIZE);
+		if (ret < 0)
+			return ret;
+
+		return -EAGAIN;
+	}
+
+	if (sret == TDX_SUCCESS)
+		return 0;
+
+	return -EIO;
+}
+
+static int tdx_spdm_session_connect(struct tdx_tsm_link *tlink)
+{
+	struct spdm_config_info_t *spdm_conf;
+	u64 sret, out_msg_sz;
+	int ret;
+
+	/* create & fill SPDM configuration buffer - a single page */
+	spdm_conf = kzalloc_obj(*spdm_conf);
+	if (!spdm_conf)
+		return -ENOMEM;
+
+	spdm_conf->certificate_slot_mask = 0xff;
+
+	do {
+		mutex_lock(&tdx_spdm_lock);
+		sret = tdh_spdm_connect(tlink->spdm_id,
+					virt_to_page(spdm_conf),
+					tlink->in_msg, tlink->out_msg,
+					NULL, &out_msg_sz);
+		mutex_unlock(&tdx_spdm_lock);
+		ret = tdx_spdm_xfer_handler(tlink, sret, out_msg_sz);
+	} while (ret == -EAGAIN);
+
+	kfree(spdm_conf);
+
+	return ret;
+}
+
+static void tdx_spdm_session_disconnect(struct tdx_tsm_link *tlink)
+{
+	u64 sret, out_msg_sz;
+	int ret;
+
+	do {
+		mutex_lock(&tdx_spdm_lock);
+		sret = tdh_spdm_disconnect(tlink->spdm_id, tlink->in_msg,
+					   tlink->out_msg, &out_msg_sz);
+		mutex_unlock(&tdx_spdm_lock);
+		ret = tdx_spdm_xfer_handler(tlink, sret, out_msg_sz);
+	} while (ret == -EAGAIN);
+
+	WARN_ON(ret);
+}
+
 static int tdx_spdm_create(struct tdx_tsm_link *tlink)
 {
 	const struct tdx_sys_info *tdx_sysinfo = tdx_get_sysinfo();
+	struct page *in_msg_page, *out_msg_page;
 	struct tdx_hpa_list_info info;
 	unsigned int nr_pages;
 	u64 spdm_id, sret;
@@ -69,12 +170,20 @@ static int tdx_spdm_create(struct tdx_tsm_link *tlink)
 	if (!tdx_sysinfo)
 		return -ENXIO;
 
+	in_msg_page = alloc_page(GFP_KERNEL | __GFP_ZERO);
+	if (!in_msg_page)
+		return -ENOMEM;
+
+	out_msg_page = alloc_page(GFP_KERNEL | __GFP_ZERO);
+	if (!out_msg_page)
+		goto out_free_in_msg;
+
 	nr_pages = tdx_sysinfo->tdx_connect.spdm_mt_page_count;
 
 	spdm_mt = alloc_pages_exact(nr_pages * PAGE_SIZE,
 				    GFP_KERNEL | __GFP_ZERO);
 	if (!spdm_mt)
-		return -ENOMEM;
+		goto out_free_out_msg;
 
 	ret = tdx_hpa_list_info_setup(&info, spdm_mt, nr_pages);
 	if (ret)
@@ -91,11 +200,17 @@ static int tdx_spdm_create(struct tdx_tsm_link *tlink)
 
 	tlink->spdm_id = spdm_id;
 	tlink->spdm_mt = spdm_mt;
+	tlink->in_msg = in_msg_page;
+	tlink->out_msg = out_msg_page;
 	tlink->spdm_mt_nr_pages = nr_pages;
 	return 0;
 
 out_free_spdm_mt:
 	free_pages_exact(spdm_mt, nr_pages * PAGE_SIZE);
+out_free_out_msg:
+	__free_page(out_msg_page);
+out_free_in_msg:
+	__free_page(in_msg_page);
 	return ret;
 }
 
@@ -111,17 +226,34 @@ static void tdx_spdm_delete(struct tdx_tsm_link *tlink)
 		return;
 	}
 
+	__free_page(tlink->in_msg);
+	__free_page(tlink->out_msg);
 	free_pages_exact(tlink->spdm_mt, tlink->spdm_mt_nr_pages * PAGE_SIZE);
 	return;
 }
 
 static int tdx_spdm_session_setup(struct tdx_tsm_link *tlink)
 {
-	return tdx_spdm_create(tlink);
+	int ret;
+
+	ret = tdx_spdm_create(tlink);
+	if (ret)
+		return ret;
+
+	ret = tdx_spdm_session_connect(tlink);
+	if (ret)
+		goto out_spdm_delete;
+
+	return 0;
+
+out_spdm_delete:
+	tdx_spdm_delete(tlink);
+	return ret;
 }
 
 static void tdx_spdm_session_teardown(struct tdx_tsm_link *tlink)
 {
+	tdx_spdm_session_disconnect(tlink);
 	tdx_spdm_delete(tlink);
 }
 
