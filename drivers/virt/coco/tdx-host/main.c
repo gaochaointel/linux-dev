@@ -66,6 +66,8 @@ struct tdx_tsm_link {
 	struct page *out_msg;
 	unsigned int spdm_mt_nr_pages;
 	void *spdm_mt;
+	unsigned int dev_info_nr_pages;
+	void *dev_info;
 };
 
 static struct tdx_tsm_link *to_tdx_tsm_link(struct pci_tsm *tsm)
@@ -167,6 +169,7 @@ static int tdx_spdm_xfer_handler(struct tdx_tsm_link *tlink, u64 sret,
 static int tdx_spdm_session_connect(struct tdx_tsm_link *tlink)
 {
 	struct spdm_config_info_t *spdm_conf;
+	struct tdx_hpa_list_info info;
 	u64 sret, out_msg_sz;
 	int ret;
 
@@ -177,16 +180,23 @@ static int tdx_spdm_session_connect(struct tdx_tsm_link *tlink)
 
 	spdm_conf->certificate_slot_mask = 0xff;
 
+	ret = tdx_hpa_list_info_setup(&info, tlink->dev_info, tlink->dev_info_nr_pages);
+	if (ret)
+		goto out_free_spdm_conf;
+
 	do {
 		mutex_lock(&tdx_spdm_lock);
 		sret = tdh_spdm_connect(tlink->spdm_id,
 					virt_to_page(spdm_conf),
 					tlink->in_msg, tlink->out_msg,
-					NULL, &out_msg_sz);
+					&info, &out_msg_sz);
 		mutex_unlock(&tdx_spdm_lock);
 		ret = tdx_spdm_xfer_handler(tlink, sret, out_msg_sz);
 	} while (ret == -EAGAIN);
 
+	tdx_hpa_list_info_free(&info);
+
+out_free_spdm_conf:
 	kfree(spdm_conf);
 
 	return ret;
@@ -212,9 +222,11 @@ static int tdx_spdm_create(struct tdx_tsm_link *tlink)
 {
 	const struct tdx_sys_info *tdx_sysinfo = tdx_get_sysinfo();
 	struct page *in_msg_page, *out_msg_page;
+	unsigned int dev_info_nr_pages;
 	struct tdx_hpa_list_info info;
 	unsigned int nr_pages;
 	u64 spdm_id, sret;
+	void *dev_info;
 	void *spdm_mt;
 	int ret;
 
@@ -230,11 +242,24 @@ static int tdx_spdm_create(struct tdx_tsm_link *tlink)
 		goto out_free_in_msg;
 
 	nr_pages = tdx_sysinfo->tdx_connect.spdm_mt_page_count;
+	dev_info_nr_pages = tdx_sysinfo->tdx_connect.spdm_max_dev_info_pages;
+
+	/*
+	 * create dev_info buffer - an hpa list.
+	 *
+	 * Attestation and negociation data will be filled by TDX module, but
+	 * they are not used for now. Ignore the data and free the buffer after
+	 * SPDM connect.
+	 */
+	dev_info = alloc_pages_exact(dev_info_nr_pages * PAGE_SIZE,
+				     GFP_KERNEL | __GFP_ZERO);
+	if (!dev_info)
+		goto out_free_out_msg;
 
 	spdm_mt = alloc_pages_exact(nr_pages * PAGE_SIZE,
 				    GFP_KERNEL | __GFP_ZERO);
 	if (!spdm_mt)
-		goto out_free_out_msg;
+		goto out_free_dev_info;
 
 	ret = tdx_hpa_list_info_setup(&info, spdm_mt, nr_pages);
 	if (ret)
@@ -254,10 +279,14 @@ static int tdx_spdm_create(struct tdx_tsm_link *tlink)
 	tlink->in_msg = in_msg_page;
 	tlink->out_msg = out_msg_page;
 	tlink->spdm_mt_nr_pages = nr_pages;
+	tlink->dev_info = dev_info;
+	tlink->dev_info_nr_pages = dev_info_nr_pages;
 	return 0;
 
 out_free_spdm_mt:
 	free_pages_exact(spdm_mt, nr_pages * PAGE_SIZE);
+out_free_dev_info:
+	free_pages_exact(dev_info, dev_info_nr_pages * PAGE_SIZE);
 out_free_out_msg:
 	__free_page(out_msg_page);
 out_free_in_msg:
@@ -280,6 +309,7 @@ static void tdx_spdm_delete(struct tdx_tsm_link *tlink)
 	__free_page(tlink->in_msg);
 	__free_page(tlink->out_msg);
 	free_pages_exact(tlink->spdm_mt, tlink->spdm_mt_nr_pages * PAGE_SIZE);
+	free_pages_exact(tlink->dev_info, tlink->dev_info_nr_pages * PAGE_SIZE);
 	return;
 }
 
