@@ -24,7 +24,8 @@
 #define P_SEAMLDR_INFO			0x8000000000000000
 #define P_SEAMLDR_INSTALL		0x8000000000000001
 
-#define SEAMLDR_MAX_NR_MODULE_PAGES	496
+#define SEAMLDR_NR_MODULE_PA_ENTRIES	496
+#define SEAMLDR_NR_CHAIN_PA_ENTRIES	(PAGE_SIZE / sizeof(u64))
 #define SEAMLDR_MAX_NR_SIG_PAGES	4
 
 /*
@@ -48,7 +49,7 @@ struct seamldr_params {
 	u64	sigstruct_pages_pa_list[SEAMLDR_MAX_NR_SIG_PAGES];
 	u8	reserved[80];
 	u64	module_nr_pages;
-	u64	module_pages_pa_list[SEAMLDR_MAX_NR_MODULE_PAGES];
+	u64	module_pages_pa_list[SEAMLDR_NR_MODULE_PA_ENTRIES];
 } __packed;
 
 static_assert(sizeof(struct seamldr_params) == 4096);
@@ -143,9 +144,62 @@ static void populate_pa_list(u64 *pa_list, const u8 *vmalloc_addr, u32 vmalloc_l
 	}
 }
 
-static void populate_seamldr_params(struct seamldr_params *params,
-				    const u8 *sig, u32 sig_nr_pages,
-				    const u8 *mod, u32 mod_nr_pages)
+/*
+ * Like populate_pa_list(), but if the pages do not fit in @pa_list, its
+ * last entry points to a newly allocated 4KB page to carry more
+ * addresses, and the chain continues until every address is recorded.
+ *
+ * free_seamldr_params() frees the chained pages regardless of the return
+ * value.
+ */
+static int populate_pa_list_chain(u64 *pa_list, u32 max_entries,
+				  const u8 *vmalloc_addr, u32 nr_pages)
+{
+	/*
+	 * The last entry of a list is reserved for the link to the next
+	 * list, so one list carries at most @max_entries - 1 addresses.
+	 * Allocate and link another list while the remaining pages do
+	 * not fit.
+	 */
+	while (nr_pages > max_entries - 1) {
+		u32 chunk = max_entries - 1;
+		u64 *next = kzalloc(PAGE_SIZE, GFP_KERNEL);
+
+		if (!next)
+			return -ENOMEM;
+
+		populate_pa_list(pa_list, vmalloc_addr, chunk);
+		pa_list[chunk] = __pa(next);
+
+		vmalloc_addr	+= chunk * PAGE_SIZE;
+		nr_pages	-= chunk;
+		pa_list		= next;
+		max_entries	= SEAMLDR_NR_CHAIN_PA_ENTRIES;
+	}
+
+	populate_pa_list(pa_list, vmalloc_addr, nr_pages);
+
+	return 0;
+}
+
+static void free_seamldr_params(struct seamldr_params *params)
+{
+	u64 next_pa = params->module_pages_pa_list[SEAMLDR_NR_MODULE_PA_ENTRIES - 1];
+
+	/* Free every page in the chain. */
+	while (next_pa) {
+		u64 *next = __va(next_pa);
+
+		next_pa = next[SEAMLDR_NR_CHAIN_PA_ENTRIES - 1];
+		kfree(next);
+	}
+
+	kfree(params);
+}
+
+static int populate_seamldr_params(struct seamldr_params *params,
+				   const u8 *sig, u32 sig_nr_pages,
+				   const u8 *mod, u32 mod_nr_pages)
 {
 	/*
 	 * Only use version 1 when required (sigstruct > 4KB) for backward
@@ -156,7 +210,10 @@ static void populate_seamldr_params(struct seamldr_params *params,
 	params->module_nr_pages	= mod_nr_pages;
 
 	populate_pa_list(params->sigstruct_pages_pa_list, sig, sig_nr_pages);
-	populate_pa_list(params->module_pages_pa_list,	  mod, mod_nr_pages);
+
+	return populate_pa_list_chain(params->module_pages_pa_list,
+				      SEAMLDR_NR_MODULE_PA_ENTRIES,
+				      mod, mod_nr_pages);
 }
 
 /*
@@ -188,8 +245,13 @@ static int init_seamldr_params(struct seamldr_params *params,
 	if (header->version != TDX_IMAGE_VERSION_2)
 		return -EINVAL;
 
+	/*
+	 * Sanity-check the sigstruct and module page counts. The module
+	 * page count has no explicit upper limit, but it must fit within
+	 * the image.
+	 */
 	if (header->sigstruct_nr_pages > SEAMLDR_MAX_NR_SIG_PAGES ||
-	    header->module_nr_pages    > SEAMLDR_MAX_NR_MODULE_PAGES)
+	    header->module_nr_pages    > image_len / PAGE_SIZE)
 		return -EINVAL;
 
 	if (memcmp(header->signature, "TDX-BLOB", sizeof(header->signature)))
@@ -198,9 +260,8 @@ static int init_seamldr_params(struct seamldr_params *params,
 	if (memchr_inv(header->reserved, 0, sizeof(header->reserved)))
 		return -EINVAL;
 
-	populate_seamldr_params(params, sigstruct_start, header->sigstruct_nr_pages,
-					module_start,    header->module_nr_pages);
-	return 0;
+	return populate_seamldr_params(params, sigstruct_start, header->sigstruct_nr_pages,
+					       module_start,    header->module_nr_pages);
 }
 
 /*
@@ -350,7 +411,7 @@ int seamldr_install_module(const u8 *data, u32 data_len)
 	cpus_read_unlock();
 
 out:
-	kfree(params);
+	free_seamldr_params(params);
 	return ret;
 }
 EXPORT_SYMBOL_FOR_MODULES(seamldr_install_module, "tdx-host");
