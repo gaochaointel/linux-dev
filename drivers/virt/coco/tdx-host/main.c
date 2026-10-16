@@ -495,7 +495,14 @@ static int tdx_ide_stream_setup(struct tdx_tsm_link *tlink)
 	if (ret)
 		goto out_tdx_ide_stream_delete;
 
-	/* Configure IDE capability for target device */
+	/* Configure IDE capability for target device
+	 *
+	 * Some test devices work only with DEFAULT_STREAM enabled. For
+	 * simplicity, enable DEFAULT_STREAM for all devices. A future decent
+	 * solution may be to have a quirk table to specify which devices need
+	 * DEFAULT_STREAM.
+	 */
+	ide->partner[PCI_IDE_EP].default_stream = 1;
 	pci_ide_stream_setup(pdev, ide);
 
 	/* Key Programming for RP & target device, enable IDE stream for RP */
