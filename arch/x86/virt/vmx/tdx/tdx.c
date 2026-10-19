@@ -2358,7 +2358,7 @@ EXPORT_SYMBOL_FOR_KVM(tdh_phymem_page_wbinvd_hkid);
 
 bool tdx_supports_dynamic_pamt(const struct tdx_sys_info *sysinfo)
 {
-	return sysinfo->features.tdx_features0 & TDX_FEATURES0_DYNAMIC_PAMT;
+	return 0;
 }
 EXPORT_SYMBOL_FOR_KVM(tdx_supports_dynamic_pamt);
 
